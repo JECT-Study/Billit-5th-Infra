@@ -54,7 +54,7 @@ services:
     restart: unless-stopped
     user: "472:472"
     network_mode: host
-    mem_limit: 384m
+    mem_limit: 512m   # 실측: 재부팅 후 약 290MiB(384m의 76%)
     environment:
       GF_SERVER_HTTP_ADDR: 127.0.0.1
       GF_SERVER_HTTP_PORT: "3000"

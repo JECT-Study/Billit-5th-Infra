@@ -256,7 +256,7 @@
   },
   {
    "type": "timeseries",
-   "title": "CPU 사용률",
+   "title": "CPU 사용률(iowait 제외)·I/O 대기",
    "id": 6,
    "gridPos": {
     "x": 0,
@@ -275,8 +275,17 @@
       "type": "prometheus",
       "uid": "prom"
      },
-     "expr": "100 * (1 - avg by(host) (rate(node_cpu_seconds_total{mode=\"idle\"}[5m])))",
-     "legendFormat": "{{host}}"
+     "expr": "100 * (1 - avg by(host) (sum by(host, cpu) (rate(node_cpu_seconds_total{mode=~\"idle|iowait\"}[5m]))))",
+     "legendFormat": "{{host}} 사용"
+    },
+    {
+     "refId": "B",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "100 * avg by(host) (rate(node_cpu_seconds_total{mode=\"iowait\"}[5m]))",
+     "legendFormat": "{{host}} iowait"
     }
    ],
    "fieldConfig": {

@@ -157,7 +157,7 @@ groups:
             datasourceUid: "prom"
             model:
               refId: "A"
-              expr: "100 * (1 - avg by(host) (rate(node_cpu_seconds_total{mode=\"idle\"}[5m])))"
+              expr: "100 * (1 - avg by(host) (sum by(host, cpu) (rate(node_cpu_seconds_total{mode=~\"idle|iowait\"}[5m]))))"
               instant: true
               intervalMs: 30000
               maxDataPoints: 43200

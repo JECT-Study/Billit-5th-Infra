@@ -81,7 +81,8 @@ RULES = {
              f"{HOST} 가용 메모리 {VAL}%",
              "컨테이너별 사용량(docker stats --no-stream)과 메모리 상한을 확인하세요."),
         rule("ject-cpu-high", "CPU 85% 초과(10분)",
-             '100 * (1 - avg by(host) (rate(node_cpu_seconds_total{mode="idle"}[5m])))',
+             # I/O 대기(iowait)는 CPU 포화가 아니므로 idle과 함께 뺀다(재부팅 직후 iowait로 85%를 넘는 오탐을 실측).
+             '100 * (1 - avg by(host) (sum by(host, cpu) (rate(node_cpu_seconds_total{mode=~"idle|iowait"}[5m]))))',
              "gt", 85, "10m", "warning",
              f"{HOST} CPU 사용률 {VAL}%",
              "VM당 1 OCPU입니다. 개발 앱·백업·부하 시험이 겹쳤는지 확인하세요."),
@@ -284,7 +285,8 @@ def overview():
             w=6, h=5, unit="percent", options=STAT,
             field={"thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": None}, {"color": "orange", "value": 15}, {"color": "green", "value": 30}]}})
     b.panel("stat", "가동 시간", [q('time() - node_boot_time_seconds', "{{host}}")], w=6, h=5, unit="s", options=STAT)
-    b.panel("timeseries", "CPU 사용률", [q('100 * (1 - avg by(host) (rate(node_cpu_seconds_total{mode="idle"}[5m])))', "{{host}}")], unit="percent")
+    b.panel("timeseries", "CPU 사용률(iowait 제외)·I/O 대기", [q('100 * (1 - avg by(host) (sum by(host, cpu) (rate(node_cpu_seconds_total{mode=~"idle|iowait"}[5m]))))', "{{host}} 사용"),
+                                                    q('100 * avg by(host) (rate(node_cpu_seconds_total{mode="iowait"}[5m]))', "{{host}} iowait")], unit="percent")
     b.panel("timeseries", "가용 메모리", [q('node_memory_MemAvailable_bytes', "{{host}}")], unit="bytes")
     b.panel("timeseries", "디스크 사용량(/)", [q('node_filesystem_size_bytes{mountpoint="/"} - node_filesystem_avail_bytes{mountpoint="/"}', "{{host}}")], unit="bytes")
     b.panel("timeseries", "네트워크 수신", [q('sum by(host) (rate(node_network_receive_bytes_total{device!~"lo|veth.*|docker.*|br-.*"}[5m]))', "{{host}}")], unit="Bps")
