@@ -93,7 +93,9 @@ RULES = {
              "운영 데이터 VM: sudo cat /srv/ject/backup-status/last.json, journalctl -u ject-pg-backup. "
              "고친 뒤 sudo systemctl start ject-pg-backup 으로 다시 실행하세요."),
         rule("ject-backup-stale", "운영 DB 백업 26시간 넘게 성공 없음",
-             '((time() - ject_backup_last_success_timestamp_seconds) / 3600) or on() (999 * absent(ject_backup_last_success_timestamp_seconds))',
+             # 지표가 아예 없을 때(999)는 운영 데이터 VM이 보일 때만 울린다(VM·수집기가 죽은 경우는 「서버 지표 끊김」이 맡는다 — 중복 방지)
+             '((time() - ject_backup_last_success_timestamp_seconds) / 3600) or on() '
+             '(999 * (absent(ject_backup_last_success_timestamp_seconds) and on() (count(last_over_time(up{job="node", host="prod-data"}[2m]) == 1) > 0)))',
              "gt", 26, "0s", "critical",
              f"마지막 백업 성공 후 {VAL}시간(999는 백업 지표 없음)",
              "매일 04:00 KST 백업이 돌지 않았거나 실패했습니다. ject-pg-backup.timer와 백업 지표 파일(/var/lib/ject/textfile)을 확인하세요."),

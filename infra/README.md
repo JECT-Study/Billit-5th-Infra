@@ -2,7 +2,8 @@
 
 설계 원본은 [`docs/인프라-설계.md`](../docs/인프라-설계.md), 이번 실행 범위는 [`docs/다음세션-인프라-구축.md`](../docs/다음세션-인프라-구축.md).
 이 폴더는 실제 구축에 쓰는 코드다. **무엇이 실제로 적용·검증됐는지는 `docs/인프라-설계.md`의 "구축 결과" 절**을 본다.
-모니터링·장애 감지(Grafana·Prometheus·Loki·Alloy·Node Exporter·OTel·Tempo·OCI 알람·Health Checks)는 이번 범위가 아니므로 여기 없다.
+모니터링·알림(Prometheus·Loki·Grafana·Alloy·Node Exporter·OCI Monitoring 알람·Notifications)은 2026-10-15 밤에 추가했다(아래 「모니터링」).
+OCI Health Checks는 무료 한도가 없어 쓰지 않는다(공인 주소 시험으로 대신). OTel·Tempo는 범위 밖이다.
 
 ## 구성
 
@@ -22,11 +23,14 @@
 | `scripts/ject-deploy-gate` | `deploy` 계정의 SSH 강제 명령. `ject-deploy deploy|rollback|status <이 VM의 환경> ...`만 검사 후 sudo로 실행(셸·포워딩·주입 불가) |
 | `scripts/ject-deploy-key` | 환경별 CI 배포 공개키를 `deploy` 계정에 등록(`from="<Bastion IP>",restrict,command="ject-deploy-gate"`) |
 | `compose/` | `prod-edge`(Nginx·Certbot), `prod-app`(앱), `prod-data`(PostgreSQL 17.11·Redis 7.4.11), `dev-*`(개발 앱·DB·게이트웨이) |
-| `systemd/` | 백업·복원 시험·인증서 갱신 타이머 |
+| `systemd/` | 백업·복원 시험·인증서 갱신 타이머, 백업 결과 지표(`ject-backup-metrics`), 알림 중계(`ject-alert-relay`) |
+| `oci/monitoring.tf` | 알림 주제 `ject-alerts`·이메일 구독, VM 응답 없음(3)·메모리 90% 알람, 개발 VM의 발행 권한 |
+| `observability/` | Prometheus·Loki·Alloy(공통·앱·관측) 설정, obs-gateway(쓰기 전용), 알림 중계기, Grafana 프로비저닝(`grafana/generate.py`로 규칙·대시보드 생성) |
+| `compose/agent.yaml`, `compose/obs.yaml` | 수집기(3대: Node Exporter·Alloy), 관측 스택(개발 VM: Prometheus·Loki·Grafana·obs-gateway) |
 | `smoke-app/` | **실제 JECT 앱이 아님.** 배포 경로 검증용 최소 이미지(/healthz, /readyz=DB·Redis 연결, /version) |
 | `github-workflows/` | 앱 저장소의 `.github/workflows/`에 넣을 ARM64 빌드·GHCR·Bastion(포트 포워딩) 배포 워크플로. 옮기는 방법·권한은 `github-workflows/README.md` |
 | `access/` | 팀원 계정 정책·공개키 제출·macOS/Windows 접속 안내, Bastion 포트 포워딩 접속 스크립트, 팀원 요청 안내문 |
-| `tests/` | 로컬 통합 시험(`local-e2e.sh`)과 OCI CLI 대역 |
+| `tests/` | 로컬 통합 시험(`local-e2e.sh` 배포·백업, `local-obs-e2e.sh` 모니터링·Swagger·Redis 정책)과 OCI CLI 대역 |
 
 ## 서버 배치
 
@@ -51,6 +55,31 @@ VM에 등록된 키로 로그인한다. CI 사용자는 `target.resource.ocid` �
 6. 도메인이 생기면 `/srv/ject/app/edge.env`에 `PROD_DOMAIN`, `DEV_DOMAIN` → DNS A 레코드 → `ject-cert issue`.
 7. 백업: `systemctl start ject-pg-backup` → `ject-pg-restore-test latest` 성공 확인.
 
+## 모니터링
+
+```text
+각 VM: Node Exporter(127.0.0.1:9100) ─┐
+       앱 관리 포트(127.0.0.1:18081) ──┼─ Alloy(수집·민감정보 가림) ──▶ 개발 VM obs-gateway(사설 IP 9090·3100, 쓰기 경로만, Basic 인증)
+       컨테이너 로그·systemd 로그 ─────┘                                     │
+개발 VM: Prometheus(14일·8GB) · Loki(7일) ◀─────────────────────────────────┘
+         Grafana(127.0.0.1:3000) ── 알림 ──▶ ject-alert-relay(127.0.0.1:9095) ──▶ OCI Notifications ject-alerts ──▶ 이메일
+         Alloy blackbox: NAT → 공인 HTTPS /readyz·인증서(1분)       OCI Monitoring 알람(VM 응답 없음·메모리) ──┘
+```
+
+- 운영 VM에는 새 인바운드 포트가 없다(밀어 넣기). NSG는 운영 VM → 개발 VM 9090·3100만 추가했다.
+- **Grafana 접속(관리자):** 개발 VM 포트 포워딩 세션을 연 뒤 `ssh -L 3000:127.0.0.1:3000` 터널.
+  예: `JECT_SSH_ARGS="-N -L 3000:127.0.0.1:3000" OCI_PROFILE=JECT bash access/ject-ssh.sh seongju dev` → 브라우저 `http://127.0.0.1:3000`(창을 닫으면 터널 종료).
+  관리자 비밀번호: 개발 VM `sudo cat /srv/ject/secrets/grafana_admin_password`(사용자 `admin`). 팀원 계정은 사람마다 따로 만든다.
+- 대시보드: 「JECT 개요」(서버·백업·공인 주소·인증서·관측 도구), 「JECT 앱」(HTTP·JVM·Hikari), 「JECT 로그」.
+  규칙·대시보드는 `observability/grafana/generate.py`를 고치고 다시 생성한 뒤 `install-role.sh dev`로 반영한다(Grafana 재시작 필요).
+- 알림 규칙 15개: 서버 지표 끊김·디스크 80/90%·메모리 15%·CPU 85%, 백업 실패·26시간 성공 없음·복원 시험 실패, 공인 주소 실패·인증서 14일,
+  앱 지표 끊김·5xx 5%·p95 1초·DB 커넥션 대기·운영 오류 로그. OCI 알람: VM 응답 없음(5분)·메모리 90%(10분).
+- 설치 순서(개발 VM): `setup-secrets.sh obs` → `PROBE_PROD_URL=… PROBE_DEV_URL=… setup-secrets.sh obs-env dev dev <개발 IP>` →
+  `/etc/ject/alert-relay.env`에 `ALERT_TOPIC_ID=$(tofu output -raw alert_topic_id)` → `docker compose -p ject-obs -f obs.yaml --env-file /etc/ject/host.env up -d` →
+  `systemctl enable --now ject-alert-relay` → `docker compose -p ject-agent -f agent.yaml --env-file /etc/ject/obs.env up -d`.
+  운영 VM: 개발 VM의 `obs_push_password`를 표준입력으로 `setup-secrets.sh obs-push` → `obs-env <prod-app|prod-data> prod <개발 IP>` → `ject-agent` 기동.
+- 알림 경로 시험: 개발 VM에서 `curl -X POST http://127.0.0.1:9095/test` → 시험 메일 1통.
+
 ## 로컬 검증
 
 ```sh
@@ -58,3 +87,4 @@ colima start --cpu 2 --memory 3
 colima ssh -- sudo bash "$PWD/infra/tests/local-e2e.sh"
 ```
 OCI 대신 `tests/fake-oci.py`를 쓰므로, 실제 버킷·인스턴스 주체 권한은 서버에서 따로 검증한다.
+모니터링: `colima ssh -- sudo bash "$PWD/infra/tests/local-obs-e2e.sh"`(중계기는 DRY_RUN — 실제 OCI 발행은 서버에서 확인).

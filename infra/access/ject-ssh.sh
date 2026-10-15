@@ -7,6 +7,7 @@
 #   JECT_BASTION_ID, JECT_PROD_APP_ID/IP, JECT_PROD_DATA_ID/IP, JECT_DEV_ID/IP)
 # 환경: OCI_PROFILE(기본 DEFAULT), OCI_AUTH(기본 security_token), SSH_KEY(기본 ~/.ssh/id_ed25519)
 #       JECT_SESSION_ID: 이미 ACTIVE인 같은 대상 세션을 재사용(세션 생성 생략)
+#       JECT_SSH_ARGS: 접속 대상 앞에 넣을 ssh 옵션(예: Grafana 터널 "-N -L 3000:127.0.0.1:3000")
 #       JECT_KNOWN_HOSTS: VM 호스트 키 파일(기본 ~/.config/ject/known_hosts, 관리자가 access.env와 함께 전달).
 #         파일이 있으면 호스트 키를 엄격히 확인하고, 없으면 처음 본 키를 그 파일에 저장한다.
 set -euo pipefail
@@ -49,7 +50,7 @@ for attempt in 1 2 3 4 5; do
   ssh -i "$KEY" -o IdentitiesOnly=yes -o ConnectTimeout=20 \
     -o UserKnownHostsFile="$KNOWN" -o StrictHostKeyChecking="$STRICT" \
     -o ProxyCommand="ssh -i $KEY -o IdentitiesOnly=yes -o UserKnownHostsFile=$BASTION_KNOWN -o StrictHostKeyChecking=accept-new -W %h:%p -p 22 $SID@host.bastion.$REGION.oci.oraclecloud.com" \
-    "$USER_NAME@$IP" "$@" || rc=$?
+    ${JECT_SSH_ARGS:-} "$USER_NAME@$IP" "$@" || rc=$?
   [ "$rc" -eq 255 ] && [ "$attempt" -lt 5 ] && [ $# -gt 0 ] || exit "$rc"
   echo "ssh 연결 재시도($attempt)" >&2; sleep 10
 done

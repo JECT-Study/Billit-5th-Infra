@@ -10,7 +10,7 @@
 | --- | --- | --- |
 | 저장소 **admin**(또는 maintain + Environments 관리) | JECT-Study 조직 관리자 → 성주(또는 BE 리더) | Environment(`development`, `production`) 생성, 비밀값·변수 입력, 보호 규칙 설정 |
 | 조직의 GitHub Packages 생성 허용 | 조직 관리자 | `ghcr.io/ject-study/<이미지>` 푸시(GITHUB_TOKEN `packages: write`) |
-| Actions 허용 정책에 `docker/*` 액션 포함 | 조직 관리자 | `build-arm64.yml`이 `docker/setup-buildx-action`, `docker/login-action`, `docker/build-push-action` 사용. 막혀 있으면 시작 단계에서 실패(startup_failure)한다 |
+| Actions 허용 정책에 `docker/*`, `gradle/actions/*` 액션 포함 | 조직 관리자 | `build-arm64.yml`이 `docker/setup-buildx-action`, `docker/login-action`, `docker/build-push-action`, `gradle-check.yml`이 `gradle/actions/setup-gradle`(+ `actions/setup-java`, `actions/upload-artifact`) 사용. 막혀 있으면 시작 단계에서 실패(startup_failure)한다 |
 | (권장) `production` Environment Required reviewers | 저장소 admin | 공개 저장소는 무료로 쓸 수 있다. 운영 배포 승인자 지정 |
 
 공개 저장소이므로 `ubuntu-24.04-arm` ARM64 러너를 무료로 쓸 수 있다(빌드가 QEMU보다 빠르다). 비공개라면 `runner: ubuntu-24.04`(QEMU)로 바꾼다.
@@ -21,7 +21,8 @@
 | --- | --- | --- |
 | `build-arm64.yml` | `.github/workflows/build-arm64.yml` | 없음 |
 | `deploy-via-bastion.yml` | `.github/workflows/deploy-via-bastion.yml` | 없음 |
-| `ci-cd.yml` | `.github/workflows/ci-cd.yml` | `check` 잡을 실제 린트·테스트(`./gradlew spotlessCheck test build`)로, `push.branches`를 팀 개발 통합 브랜치로, `image_name`을 실제 이미지 이름(예: `ject-be`)으로 |
+| `gradle-check.yml` | `.github/workflows/gradle-check.yml` | 없음(Gradle 프로젝트가 저장소 루트가 아니면 `working_directory`) |
+| `ci-cd.yml` | `.github/workflows/ci-cd.yml` | `push.branches`를 팀 개발 통합 브랜치로, `image_name`을 실제 이미지 이름(예: `ject-be`)으로. `check`는 이미 `gradle-check.yml`(spotlessCheck·test·build)을 부르고, push 때 build가 check 뒤에 돈다 |
 
 앱 이미지 조건: ARM64, 컨테이너 `HEALTHCHECK`, `GET /readyz`(DB·Redis 연결 확인, 200/503), 8080 포트, 루트가 아닌 사용자.
 UID가 65532가 아니면 서버의 `APP_UID`로 `setup-secrets.sh prod-app-env`/`dev-app-env`를 다시 실행해 Redis 비밀번호 파일 소유자를 맞춘다.
@@ -48,6 +49,13 @@ UID가 65532가 아니면 서버의 `APP_UID`로 `setup-secrets.sh prod-app-env`
 
 개인키는 GitHub에서 다시 읽을 수 없다. 옮길 때는 **새 키를 만들어** 앱 저장소에 넣고(`oci iam user api-key upload`, `ject-deploy-key install`),
 `ghdtjdwn/ject-infra`의 옛 키는 OCI에서 삭제한다(`oci iam user api-key delete`).
+
+## 4-1. CI 검사(gradle-check.yml)
+
+- PR·push마다 `./gradlew --no-daemon spotlessCheck test build`. 비밀값을 쓰지 않는다(포크 PR에서도 돈다).
+- 서비스 컨테이너: PostgreSQL 17.11(`ject`/`ject`, 호스트 15432)·Redis 7.4.11(16379) — 로컬 `compose.yaml`과 같아서 `local` 프로필 그대로 테스트가 붙는다.
+- 실패하면 `test-reports` 아티팩트(7일). `setup-gradle`이 wrapper 체크섬을 검증하고 Gradle 캐시를 쓴다.
+- 2026-10-15 `ghdtjdwn/ject-infra`의 `e2e-spring-sample`(check → build → 개발 배포)로 실제 실행했다.
 
 ## 5. 검증 순서 (ject-infra에서 실제로 한 것과 같음)
 

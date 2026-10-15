@@ -18,13 +18,15 @@ resource "oci_ons_subscription" "alert_email" {
   freeform_tags  = local.tags
 }
 
-# Grafana 알림은 개발 VM의 ject-alert-relay(127.0.0.1)가 인스턴스 주체로 이 주제에 발행한다. 이 주제에만 허용.
+# Grafana 알림은 개발 VM의 ject-alert-relay(127.0.0.1)가 인스턴스 주체로 이 주제에 발행한다.
+# Notifications 정책 조건에는 일반 변수만 쓸 수 있다(target.topic.id 불가 → 실측 404 NotAuthorizedOrNotFound).
+# 그래서 JECT 구역의 주제(ject-alerts 하나)에 "발행"만 허용한다. 구독 추가·변경(ONS_TOPIC_SUBSCRIBE 등)은 주지 않는다.
 resource "oci_identity_policy" "alert_publish" {
   compartment_id = oci_identity_compartment.ject.id
   name           = "ject-alert-publish"
-  description    = "개발·모니터링 VM이 ject-alerts 주제에만 알림 발행"
+  description    = "개발·모니터링 VM이 JECT 알림 주제에 발행만"
   statements = [
-    "Allow dynamic-group ${oci_identity_dynamic_group.vm["ject-dev-obs"].name} to use ons-topics in compartment JECT where target.topic.id = '${oci_ons_notification_topic.alerts.id}'",
+    "Allow dynamic-group ${oci_identity_dynamic_group.vm["ject-dev-obs"].name} to use ons-topics in compartment JECT where request.permission = 'ONS_TOPIC_PUBLISH'",
   ]
   freeform_tags = local.tags
 }

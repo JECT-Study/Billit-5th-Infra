@@ -38,7 +38,7 @@ check "AOF 유지" bash -c "REDISCLI_AUTH=\"\$(cat /srv/ject/secrets/redis_passw
 echo "== C2 개발 게이트웨이 Swagger (Basic 인증) =="
 docker rm -f e2e-be >/dev/null 2>&1 || true
 docker run -d --name e2e-be --network ject-dev-net --network-alias be nginx:1.30.6-alpine sh -c \
-  'printf "server{listen 8080; location / {return 200 \"be:\$uri auth=[\$http_authorization]\";}}" > /etc/nginx/conf.d/default.conf && nginx -g "daemon off;"' >/dev/null
+  'printf "server{listen 8080; location / {return 200 \"be:\$uri auth=[\$http_authorization] proto=\$http_x_forwarded_proto\";}}" > /etc/nginx/conf.d/default.conf && nginx -g "daemon off;"' >/dev/null
 install -d /srv/ject/dev/nginx/conf.d
 bash /opt/ject/bin/render-nginx.sh dev-gateway >/dev/null
 docker compose -p ject-dev-gateway -f /opt/ject/compose/dev-gateway.yaml --env-file /etc/ject/host.env up -d --wait >/dev/null
@@ -52,6 +52,8 @@ check "인증 없이 /swagger-ui 401" bash -c "[ \$(curl -s -o /dev/null -w '%{h
 check "틀린 비밀번호 401" bash -c "[ \$(curl -s -o /dev/null -w '%{http_code}' -u ject:wrong $GW/v3/api-docs) = 401 ]"
 check "인증 후 /v3/api-docs 200(앱으로 전달)" bash -c "curl -fsS -u 'ject:$SW' $GW/v3/api-docs | grep -q 'be:/v3/api-docs'"
 check "앱에 Authorization 헤더 전달 안 함" bash -c "curl -fsS -u 'ject:$SW' $GW/swagger-ui/index.html | grep -q 'auth=\[\]'"
+check "개발 게이트웨이: 앞단 X-Forwarded-Proto(https) 유지" bash -c "curl -fsS -H 'X-Forwarded-Proto: https' $GW/api/x | grep -q 'proto=https'"
+check "개발 게이트웨이: 앞단 값 없으면 자기 scheme" bash -c "curl -fsS $GW/api/x | grep -q 'proto=http\$'"
 check "개발 /actuator 계속 404" bash -c "[ \$(curl -s -o /dev/null -w '%{http_code}' -u 'ject:$SW' $GW/actuator/health) = 404 ]"
 check "개발 /api 인증 없이 통과" bash -c "curl -fsS $GW/api/x | grep -q 'be:/api/x'"
 check "운영 규칙은 Swagger 404 유지(edge 템플릿)" grep -q 'swagger-ui|v3/api-docs) { return 404; }' /opt/ject/bin/render-nginx.sh

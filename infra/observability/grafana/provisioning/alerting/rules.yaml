@@ -232,7 +232,7 @@ groups:
             datasourceUid: "prom"
             model:
               refId: "A"
-              expr: "((time() - ject_backup_last_success_timestamp_seconds) / 3600) or on() (999 * absent(ject_backup_last_success_timestamp_seconds))"
+              expr: "((time() - ject_backup_last_success_timestamp_seconds) / 3600) or on() (999 * (absent(ject_backup_last_success_timestamp_seconds) and on() (count(last_over_time(up{job=\"node\", host=\"prod-data\"}[2m]) == 1) > 0)))"
               instant: true
               intervalMs: 30000
               maxDataPoints: 43200
