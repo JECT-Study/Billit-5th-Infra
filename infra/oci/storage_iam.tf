@@ -114,6 +114,8 @@ resource "oci_identity_policy" "ci" {
   statements = [
     "Allow group ${oci_identity_group.ci[each.key].name} to use bastion in compartment JECT where target.bastion.name = 'jectbastion'",
     "Allow group ${oci_identity_group.ci[each.key].name} to manage bastion-session in compartment JECT where target.resource.ocid = '${oci_core_instance.vm[each.value].id}'",
+    # 세션 조회(Get/List) 요청에는 target.resource.ocid가 채워지지 않아 위 조건만으로는 404가 난다. 조회만 별도로 허용한다.
+    "Allow group ${oci_identity_group.ci[each.key].name} to read bastion-session in compartment JECT where target.bastion.name = 'jectbastion'",
     "Allow group ${oci_identity_group.ci[each.key].name} to read instances in compartment JECT",
     # 세션을 만들 때 Bastion이 요청자 권한으로 대상 VM의 VNIC·사설 IP를 조회한다(없으면 NotAuthorizedOrNotFound / Unknown resource).
     "Allow group ${oci_identity_group.ci[each.key].name} to read vnic-attachments in compartment JECT",

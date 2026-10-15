@@ -91,8 +91,10 @@ jobs:
             --ssh-public-key-file "$RUNNER_TEMP/bk.pub" --session-ttl 1800 \
             --display-name "gha-${GITHUB_RUN_ID}-${ENVN}" --query 'data.id' --raw-output)
           echo "id=$sid" >> "$GITHUB_OUTPUT"
+          st=PENDING
           for _ in $(seq 1 60); do
-            st=$(oci bastion session get --session-id "$sid" --query 'data."lifecycle-state"' --raw-output)
+            # 생성 직후 조회는 잠시 실패할 수 있으므로 오류는 대기로 취급한다(최대 5분).
+            st=$(oci bastion session get --session-id "$sid" --query 'data."lifecycle-state"' --raw-output 2>/dev/null || echo PENDING)
             [ "$st" = ACTIVE ] && break
             [[ "$st" =~ ^(FAILED|DELETED|DELETING)$ ]] && { echo "session $st"; exit 1; }
             sleep 5

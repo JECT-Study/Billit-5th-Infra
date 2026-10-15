@@ -30,7 +30,7 @@ if [ -z "$SID" ]; then
     --query 'data.id' --raw-output)
   st=""
   for _ in $(seq 1 60); do
-    st=$(oci bastion session get --session-id "$SID" --query 'data."lifecycle-state"' --raw-output)
+    st=$(oci bastion session get --session-id "$SID" --query 'data."lifecycle-state"' --raw-output 2>/dev/null || echo PENDING)
     [ "$st" = ACTIVE ] && break
     [[ "$st" =~ ^(FAILED|DELETED|DELETING)$ ]] && { echo "세션 실패: $st" >&2; exit 1; }
     sleep 5
