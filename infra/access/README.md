@@ -10,7 +10,8 @@
 - 접속은 **OCI Bastion 세션**으로만 한다. VM의 SSH(22)는 인터넷에 열려 있지 않고 Bastion 엔드포인트에서만 허용된다.
 - OCI 콘솔 권한은 `ject-developers` 그룹: JECT Compartment의 조회와 Bastion 세션 생성만. 테넌시 관리·개인 자원·
   버킷 객체(백업·업로드 파일) 내용 읽기 권한은 없다. 서버 sudo와 OCI 자원 생성·삭제 권한은 별개다.
-- CI 배포는 사람 계정과 분리된 `deploy` 계정과 CI 전용 OCI 사용자로 한다.
+- CI 배포는 사람 계정과 분리된 `deploy` 계정과 CI 전용 OCI 사용자(`ject-ci-dev-bot`, `ject-ci-prod-bot`)로 한다.
+  `deploy` 계정은 환경별 CI 키만 받고, Bastion IP에서 온 접속만 허용하며, 로그인하면 `ject-deploy-gate`(배포 명령 검사기)만 실행된다.
 
 ## 1. 팀원이 보낼 것 (공개키·이메일)
 
@@ -43,10 +44,14 @@ Get-Content $env:USERPROFILE\.ssh\id_ed25519.pub
 
 ### 콘솔에서 세션 만들기 (가장 쉬움)
 
+JECT VM은 ARM(A1) + Ubuntu라서 OCI Bastion의 **관리형 SSH 세션(Managed SSH)을 쓸 수 없다**(OCI 알려진 문제).
+**포트 포워딩 세션**으로 VM의 22번까지 터널을 열고, 로그인은 VM에 등록된 본인 공개키로 한다.
+
 1. OCI 콘솔 → Identity & Security → Bastion → Compartment `JECT` → `jectbastion`.
-2. **Create session** → Session type: *Managed SSH session* → Username: 본인 리눅스 계정 이름 →
-   Compute instance: 접속할 VM(`ject-prod-app` / `ject-prod-data` / `ject-dev-obs`) → SSH key: 본인 `.pub` 붙여넣기.
-3. 세션이 Active가 되면 ⋮ → **Copy SSH command**. `<privateKey>`를 본인 개인키 경로로 바꿔 실행.
+2. **Create session** → Session type: *SSH port forwarding session* → Connect to the target host by: *Instance name* →
+   Compute instance: 접속할 VM(`ject-prod-app` / `ject-prod-data` / `ject-dev-obs`) → Port: `22` →
+   SSH key: 본인 `.pub` 붙여넣기(Bastion 접속용. VM 로그인 키와 같아도 된다).
+3. 세션이 Active가 되면 세션 OCID를 복사해 아래 명령의 `<세션OCID>`에 넣는다. VM 사설 IP는 관리자가 준 `access.env`에 있다.
 
 macOS / Linux 예:
 ```sh
@@ -58,11 +63,12 @@ Windows PowerShell 예:
 ssh -i $env:USERPROFILE\.ssh\id_ed25519 -o ProxyCommand="ssh -i $env:USERPROFILE\.ssh\id_ed25519 -W %h:%p -p 22 <세션OCID>@host.bastion.ap-chuncheon-1.oci.oraclecloud.com" <username>@<VM 사설 IP>
 ```
 
-세션은 최대 3시간 유지된다. 끝나면 다시 만든다.
+세션은 최대 3시간 유지된다. 끝나면 다시 만든다. 세션 하나는 VM 하나에만 쓴다.
 
 ### CLI로 세션 만들기 (선택)
 
-`infra/access/ject-ssh.sh <username> <prod-app|prod-data|dev>` (OCI CLI 로그인 필요)가 세션 생성·대기·접속을 한 번에 한다.
+`infra/access/ject-ssh.sh <username> <prod-app|prod-data|dev>` (OCI CLI 로그인 필요)가 포트 포워딩 세션 생성·대기·접속을 한 번에 한다.
+같은 세션을 다시 쓰려면 `JECT_SESSION_ID=<세션OCID>`를 앞에 붙인다. 관리자가 준 `access.env`를 `~/.config/ject/access.env`에 둔다.
 
 ## 4. 서버에서 지킬 것
 
