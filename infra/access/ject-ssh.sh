@@ -7,6 +7,8 @@
 #   JECT_BASTION_ID, JECT_PROD_APP_ID/IP, JECT_PROD_DATA_ID/IP, JECT_DEV_ID/IP)
 # 환경: OCI_PROFILE(기본 DEFAULT), OCI_AUTH(기본 security_token), SSH_KEY(기본 ~/.ssh/id_ed25519)
 #       JECT_SESSION_ID: 이미 ACTIVE인 같은 대상 세션을 재사용(세션 생성 생략)
+#       JECT_KNOWN_HOSTS: VM 호스트 키 파일(기본 ~/.config/ject/known_hosts, 관리자가 access.env와 함께 전달).
+#         파일이 있으면 호스트 키를 엄격히 확인하고, 없으면 처음 본 키를 그 파일에 저장한다.
 set -euo pipefail
 USER_NAME="${1:?username}"; TARGET="${2:?prod-app|prod-data|dev}"; shift 2
 CONF="${JECT_ACCESS_ENV:-$HOME/.config/ject/access.env}"
@@ -38,6 +40,16 @@ if [ -z "$SID" ]; then
   [ "$st" = ACTIVE ] || { echo "세션 대기 시간 초과" >&2; exit 1; }
   echo "세션 준비됨(3시간, 재사용: JECT_SESSION_ID=$SID). 접속: $USER_NAME@$TARGET ($IP)" >&2
 fi
-exec ssh -i "$KEY" -o IdentitiesOnly=yes \
-  -o ProxyCommand="ssh -i $KEY -o IdentitiesOnly=yes -W %h:%p -p 22 $SID@host.bastion.$REGION.oci.oraclecloud.com" \
-  "$USER_NAME@$IP" "$@"
+KNOWN="${JECT_KNOWN_HOSTS:-$(dirname "$CONF")/known_hosts}"
+if [ -s "$KNOWN" ]; then STRICT=yes; else STRICT=accept-new; fi
+BASTION_KNOWN="$(dirname "$KNOWN")/bastion_known_hosts"
+# 세션이 ACTIVE가 된 직후에는 터널이 잠시 실패할 수 있어 ssh 연결 오류(255)만 몇 번 다시 시도한다.
+for attempt in 1 2 3 4 5; do
+  rc=0
+  ssh -i "$KEY" -o IdentitiesOnly=yes -o ConnectTimeout=20 \
+    -o UserKnownHostsFile="$KNOWN" -o StrictHostKeyChecking="$STRICT" \
+    -o ProxyCommand="ssh -i $KEY -o IdentitiesOnly=yes -o UserKnownHostsFile=$BASTION_KNOWN -o StrictHostKeyChecking=accept-new -W %h:%p -p 22 $SID@host.bastion.$REGION.oci.oraclecloud.com" \
+    "$USER_NAME@$IP" "$@" || rc=$?
+  [ "$rc" -eq 255 ] && [ "$attempt" -lt 5 ] && [ $# -gt 0 ] || exit "$rc"
+  echo "ssh 연결 재시도($attempt)" >&2; sleep 10
+done
