@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+# 운영 앱 VM의 Let's Encrypt 인증서 발급·갱신 (HTTP-01 webroot)
+#   ject-cert issue    /srv/ject/app/edge.env의 PROD_DOMAIN(,DEV_DOMAIN)으로 최초 발급
+#   ject-cert renew    만료 30일 이내면 갱신, 갱신됐을 때만 Nginx 설정 재생성·reload
+#   ject-cert dry-run  스테이징 서버로 갱신 시험(실제 인증서 변경 없음)
+set -euo pipefail
+. /srv/ject/app/edge.env
+CERT_NAME="${CERT_NAME:-ject}"
+EDGE="docker compose -p ject-edge -f /opt/ject/compose/prod-edge.yaml"
+MARK=/srv/ject/certs/.renewed
+
+reload_nginx() {
+  /opt/ject/bin/render-nginx.sh edge
+  $EDGE exec -T nginx nginx -t
+  $EDGE exec -T nginx nginx -s reload
+}
+
+case "${1:-}" in
+issue)
+  [ -n "${PROD_DOMAIN:-}" ] || { echo "PROD_DOMAIN 미설정" >&2; exit 1; }
+  domains=(-d "$PROD_DOMAIN"); [ -n "${DEV_DOMAIN:-}" ] && domains+=(-d "$DEV_DOMAIN")
+  email=(--register-unsafely-without-email); [ -n "${ACME_EMAIL:-}" ] && email=(--email "$ACME_EMAIL")
+  $EDGE run --rm certbot certonly --webroot -w /var/www/acme --cert-name "$CERT_NAME" \
+    "${domains[@]}" "${email[@]}" --agree-tos --non-interactive --keep-until-expiring
+  reload_nginx ;;
+renew)
+  # 표식은 재적용에 성공한 뒤에만 지운다(재적용 실패 시 다음 실행에서 다시 시도).
+  $EDGE run --rm certbot renew --webroot -w /var/www/acme --deploy-hook "touch /etc/letsencrypt/.renewed"
+  if [ -f "$MARK" ]; then reload_nginx && rm -f "$MARK"; echo "renewed and reloaded"; else echo "no renewal needed"; fi ;;
+dry-run)
+  $EDGE run --rm certbot renew --webroot -w /var/www/acme --dry-run ;;
+*) echo "usage: ject-cert issue|renew|dry-run" >&2; exit 2 ;;
+esac

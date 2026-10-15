@@ -1,0 +1,87 @@
+# 운영 데이터 VM (ject-prod-data): PostgreSQL 17 + Redis 7.4
+# 실행: docker compose -f prod-data.yaml --env-file /srv/ject/data.env up -d
+# 포트는 VM의 사설 IP(DATA_BIND_IP)에만 바인딩하고, OCI NSG로 운영 앱 VM만 허용한다.
+# 앱 배포 스크립트는 이 프로젝트를 재시작하지 않는다.
+name: ject-prod-data
+
+x-logging: &logging
+  driver: json-file
+  options: { max-size: "10m", max-file: "3" }
+
+services:
+  postgres:
+    image: postgres:17.11-bookworm
+    restart: unless-stopped
+    stop_grace_period: 60s
+    shm_size: 256m
+    mem_limit: 3072m
+    environment:
+      POSTGRES_USER: ject_admin
+      POSTGRES_DB: postgres
+      POSTGRES_PASSWORD_FILE: /run/secrets/pg_admin_password
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C.UTF-8 --data-checksums"
+      TZ: Asia/Seoul
+    command:
+      - postgres
+      - -c
+      - shared_buffers=768MB
+      - -c
+      - effective_cache_size=2GB
+      - -c
+      - work_mem=8MB
+      - -c
+      - maintenance_work_mem=128MB
+      - -c
+      - max_connections=60
+      - -c
+      - password_encryption=scram-sha-256
+      - -c
+      - log_min_duration_statement=1000
+      - -c
+      - log_connections=off
+      - -c
+      - log_statement=ddl
+      - -c
+      - timezone=Asia/Seoul
+    secrets: [pg_admin_password, pg_app_password]
+    volumes:
+      - /srv/ject/data/postgres:/var/lib/postgresql/data
+      - ./initdb:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "${DATA_BIND_IP:?}:5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ject_admin -d postgres -h 127.0.0.1"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 30s
+    logging: *logging
+
+  redis:
+    image: redis:7.4.11-alpine
+    restart: unless-stopped
+    mem_limit: 512m
+    # 용도(캐시/세션/업무 상태)가 확정되기 전이므로 삭제 가능한 캐시로 취급하지 않는다:
+    # AOF 영속 + noeviction. 용도가 정해지면 정책을 다시 정한다.
+    command: ["redis-server", "/run/secrets/redis_conf"]
+    secrets: [redis_conf, redis_password]
+    volumes:
+      - /srv/ject/data/redis:/data
+    ports:
+      - "${DATA_BIND_IP:?}:6379:6379"
+    healthcheck:
+      test: ["CMD-SHELL", "REDISCLI_AUTH=\"$$(cat /run/secrets/redis_password)\" redis-cli ping | grep -q PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+    logging: *logging
+
+secrets:
+  pg_admin_password:
+    file: /srv/ject/secrets/pg_admin_password
+  pg_app_password:
+    file: /srv/ject/secrets/pg_app_password
+  redis_conf:
+    file: /srv/ject/secrets/redis.conf
+  redis_password:
+    file: /srv/ject/secrets/redis_password

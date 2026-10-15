@@ -1,0 +1,46 @@
+# 개발 VM의 개발 앱. 이미지 참조는 /srv/ject/dev/release.env(배포 스크립트 관리).
+# 운영 DB·Redis 주소와 비밀값을 넣지 않는다(개발 DB만 사용).
+name: ject-dev
+
+x-logging: &logging
+  driver: json-file
+  options: { max-size: "10m", max-file: "3" }
+
+services:
+  be:
+    image: ${JECT_BE_IMAGE:?}
+    restart: unless-stopped
+    stop_grace_period: 30s
+    mem_limit: 1024m
+    cpus: 0.30
+    env_file:
+      - /srv/ject/secrets/dev-be.env
+    environment:
+      APP_ENV: dev
+      PORT: "8080"
+      TZ: Asia/Seoul
+      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=50 -XX:+ExitOnOutOfMemoryError"
+    secrets: [redis_password]
+    networks: [ject-dev-net]
+    logging: *logging
+
+  fe:
+    image: ${JECT_FE_IMAGE:-busybox:stable}
+    profiles: [fe]
+    restart: unless-stopped
+    mem_limit: 384m
+    cpus: 0.20
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+    networks: [ject-dev-net]
+    logging: *logging
+
+secrets:
+  redis_password:
+    file: /srv/ject/secrets/app_redis_password
+
+networks:
+  ject-dev-net:
+    name: ject-dev-net
+    external: true

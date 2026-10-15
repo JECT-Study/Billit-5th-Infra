@@ -1,0 +1,8 @@
+[Unit]
+Description=JECT Let's Encrypt 인증서 갱신과 Nginx 재적용
+After=docker.service network-online.target
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/ject/bin/ject-cert renew

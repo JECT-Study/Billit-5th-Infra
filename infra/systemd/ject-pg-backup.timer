@@ -1,0 +1,10 @@
+[Unit]
+Description=JECT 운영 PostgreSQL 일일 백업 (매일 04:00 KST)
+
+[Timer]
+OnCalendar=*-*-* 04:00:00 Asia/Seoul
+Persistent=true
+Unit=ject-pg-backup.service
+
+[Install]
+WantedBy=timers.target

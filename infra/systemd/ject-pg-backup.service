@@ -1,0 +1,13 @@
+[Unit]
+Description=JECT 운영 PostgreSQL 일일 백업 (Object Storage)
+After=docker.service network-online.target
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/ject/bin/ject-pg-backup
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+TimeoutStartSec=2h

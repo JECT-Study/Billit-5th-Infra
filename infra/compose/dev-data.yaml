@@ -1,0 +1,66 @@
+# 개발 VM (ject-dev-obs)의 개발 전용 PostgreSQL·Redis. 운영과 계정·비밀값·데이터가 분리된다.
+# 호스트 포트를 열지 않는다(같은 VM의 ject-dev-net 안에서만 접근).
+name: ject-dev-data
+
+x-logging: &logging
+  driver: json-file
+  options: { max-size: "10m", max-file: "3" }
+
+services:
+  postgres:
+    image: postgres:17.11-bookworm
+    restart: unless-stopped
+    stop_grace_period: 30s
+    mem_limit: 512m
+    environment:
+      POSTGRES_USER: ject_admin
+      POSTGRES_DB: postgres
+      POSTGRES_PASSWORD_FILE: /run/secrets/pg_admin_password
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C.UTF-8"
+      APP_DB: ject_dev
+      APP_ROLE: ject_dev_app
+      TZ: Asia/Seoul
+    command: ["postgres", "-c", "shared_buffers=128MB", "-c", "max_connections=30", "-c", "timezone=Asia/Seoul"]
+    secrets: [pg_admin_password, pg_app_password]
+    volumes:
+      - /srv/ject/dev-data/postgres:/var/lib/postgresql/data
+      - ./initdb:/docker-entrypoint-initdb.d:ro
+    networks: [ject-dev-net]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ject_admin -d postgres -h 127.0.0.1"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 30s
+    logging: *logging
+
+  redis:
+    image: redis:7.4.11-alpine
+    restart: unless-stopped
+    mem_limit: 128m
+    command: ["redis-server", "/run/secrets/redis_conf"]
+    secrets: [redis_conf, redis_password]
+    volumes:
+      - /srv/ject/dev-data/redis:/data
+    networks: [ject-dev-net]
+    healthcheck:
+      test: ["CMD-SHELL", "REDISCLI_AUTH=\"$$(cat /run/secrets/redis_password)\" redis-cli ping | grep -q PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+    logging: *logging
+
+secrets:
+  pg_admin_password:
+    file: /srv/ject/secrets/pg_admin_password
+  pg_app_password:
+    file: /srv/ject/secrets/pg_app_password
+  redis_conf:
+    file: /srv/ject/secrets/redis.conf
+  redis_password:
+    file: /srv/ject/secrets/redis_password
+
+networks:
+  ject-dev-net:
+    name: ject-dev-net
+    external: true

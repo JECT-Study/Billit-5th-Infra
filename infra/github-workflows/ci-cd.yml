@@ -1,0 +1,58 @@
+# 앱 저장소에 둘 진입 워크플로 예시.
+#  - PR: 비밀값 없이 검사만(앱 저장소의 실제 린트·테스트 명령으로 바꾼다)
+#  - 개발 통합 브랜치(팀 미정 → 기본 develop) push: ARM64 빌드 → GHCR → 개발 VM 자동 배포 → 커밋에 dev-verified 표시
+#  - 운영: workflow_dispatch로 개발에서 검증된 digest와 그 커밋을 지정. production 환경 승인 후 배포. 롤백은 action=rollback
+# 앱 이미지에는 HEALTHCHECK과 /readyz(DB·Redis 연결 확인)를 둔다(ject-deploy가 확인).
+name: ci-cd
+
+on:
+  pull_request:
+  push:
+    branches: [develop]
+  workflow_dispatch:
+    inputs:
+      environment: { type: choice, options: [prod, dev], default: prod }
+      action:      { type: choice, options: [deploy, rollback], default: deploy }
+      image:       { type: string, required: false, description: "deploy: ghcr.io/<owner>/ject-be@sha256:..." }
+      commit:      { type: string, required: false, description: "prod deploy: 이미지를 만든 커밋 SHA(40자)" }
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      # 예: Spring 앱이면 ./gradlew spotlessCheck test build
+      - run: echo "앱 저장소의 린트·테스트·빌드 명령으로 교체"
+
+  build:
+    if: github.event_name == 'push'
+    permissions: { contents: read, packages: write }
+    uses: ./.github/workflows/build-arm64.yml
+    with:
+      image_name: ject-be
+
+  deploy-dev:
+    if: github.event_name == 'push'
+    needs: build
+    permissions: { contents: read, packages: read, statuses: write }
+    uses: ./.github/workflows/deploy-via-bastion.yml
+    with:
+      environment: dev
+      image: ${{ needs.build.outputs.image }}
+      commit: ${{ github.sha }}
+    secrets: inherit
+
+  deploy-manual:
+    if: github.event_name == 'workflow_dispatch'
+    permissions: { contents: read, packages: read, statuses: write }
+    uses: ./.github/workflows/deploy-via-bastion.yml
+    with:
+      environment: ${{ inputs.environment }}
+      action: ${{ inputs.action }}
+      image: ${{ inputs.image }}
+      commit: ${{ inputs.commit }}
+    secrets: inherit

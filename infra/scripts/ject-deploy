@@ -1,0 +1,177 @@
+#!/usr/bin/env bash
+# JECT 앱 배포 (운영 앱 VM / 개발 VM에서 root로 실행. CI는 deploy 계정의 sudo로만 호출)
+#
+#   ject-deploy deploy   <prod|dev> <be|fe> <image@sha256:digest> [actor] [registry-user]
+#       registry-user를 주면 표준입력에서 읽은 토큰으로 이번 pull에만 임시 로그인한다
+#       (CI의 GITHUB_TOKEN packages:read. 서버에 장기 레지스트리 자격증명을 두지 않음)
+#   ject-deploy rollback <prod|dev> <be|fe> [actor]      직전 성공 이미지로 되돌림
+#   ject-deploy status   <prod|dev>
+#
+# 보장하는 것:
+#   - 같은 환경의 동시 배포 금지(flock, 대기하지 않고 실패)
+#   - digest 고정 이미지만 허용, 허용된 레지스트리 접두사만 허용
+#   - 디스크 여유 확인 → pull → Compose 검증 → 대상 서비스만 교체(--no-deps)
+#   - 컨테이너 healthcheck(healthy) + 앱 readiness + Nginx 경유 readiness 확인
+#   - 실패 시 이전 이미지로 자동 복구 후 다시 확인, 결과를 deploy-history.jsonl에 기록
+# 하지 않는 것: DB·Redis·Nginx 재시작, DB 마이그레이션 되돌리기, 전체 compose down
+set -euo pipefail
+umask 027
+
+CONF=/etc/ject/deploy.conf
+[ -f "$CONF" ] && . "$CONF"
+ALLOWED_IMAGE_PREFIX="${ALLOWED_IMAGE_PREFIX:-ghcr.io/}"
+MIN_FREE_PCT="${MIN_FREE_PCT:-15}"
+WAIT_TIMEOUT="${WAIT_TIMEOUT:-180}"
+KEEP_IMAGES="${KEEP_IMAGES:-3}"
+
+die() { echo "ject-deploy: $*" >&2; exit 1; }
+log() { echo "[$(date '+%F %T%z')] $*"; }
+
+[ "$(id -u)" -eq 0 ] || die "root(sudo)로 실행해야 한다"
+CMD="${1:-}"; ENVN="${2:-}"
+case "$ENVN" in
+  prod)
+    COMPOSE=/opt/ject/compose/prod-app.yaml; PROJECT=ject-prod; STATE=/srv/ject/app
+    GATEWAY=ject-edge-nginx-1 ;;
+  dev)
+    COMPOSE=/opt/ject/compose/dev-app.yaml; PROJECT=ject-dev; STATE=/srv/ject/dev
+    GATEWAY=ject-dev-gateway-nginx-1 ;;
+  *) die "환경은 prod 또는 dev" ;;
+esac
+[ -f "$COMPOSE" ] || die "$COMPOSE 없음 (이 VM의 역할이 맞는지 확인)"
+RELEASE="$STATE/release.env"
+HISTORY="$STATE/deploy-history.jsonl"
+touch "$RELEASE" "$HISTORY"
+
+svc_var() { case "$1" in be) echo JECT_BE_IMAGE;; fe) echo JECT_FE_IMAGE;; *) die "서비스는 be 또는 fe";; esac; }
+current_image() { grep -E "^$1=" "$RELEASE" | tail -1 | cut -d= -f2- || true; }
+
+compose() { docker compose -p "$PROJECT" -f "$COMPOSE" --env-file "$RELEASE" "$@"; }
+
+record() {   # result service from to actor note
+  printf '{"time":"%s","env":"%s","service":"%s","result":"%s","from":"%s","to":"%s","actor":"%s","note":"%s"}\n' \
+    "$(date -Iseconds)" "$ENVN" "$2" "$1" "$3" "$4" "$5" "${6:-}" >> "$HISTORY"
+}
+
+set_release() {   # var image
+  local tmp="$RELEASE.new"
+  { grep -vE "^$1=" "$RELEASE" || true; echo "$1=$2"; } > "$tmp"
+  docker compose -p "$PROJECT" -f "$COMPOSE" --env-file "$tmp" config -q || { rm -f "$tmp"; return 1; }
+  mv "$tmp" "$RELEASE"
+}
+
+ready_checks() {   # service
+  local svc="$1" cid status i
+  cid="$(compose ps -q "$svc")"
+  [ -n "$cid" ] || { log "컨테이너 없음"; return 1; }
+  status="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$cid")"
+  [ "$status" = healthy ] || { log "healthcheck 상태: $status"; return 1; }
+  [ "$svc" = be ] || return 0
+  # 1) 게이트웨이 컨테이너에서 앱 readiness 직접 확인 (DB·Redis 연결 포함)
+  local ok=0
+  for i in $(seq 1 30); do
+    if docker exec "$GATEWAY" wget -q -T 3 -O /dev/null "http://be:8080/readyz"; then ok=1; break; fi
+    sleep 2
+  done
+  [ "$ok" = 1 ] || { log "앱 readiness 실패"; return 1; }
+  # 2) Nginx 라우팅을 거친 readiness
+  if [ "$ENVN" = prod ] && [ -n "${PROD_DOMAIN:-}" ] && [ -s "/srv/ject/certs/live/${CERT_NAME:-ject}/fullchain.pem" ]; then
+    curl -fsS -m 5 --resolve "$PROD_DOMAIN:443:127.0.0.1" "https://$PROD_DOMAIN/readyz" >/dev/null || { log "Nginx(HTTPS) 경유 readiness 실패"; return 1; }
+  elif [ "$ENVN" = prod ]; then
+    curl -fsS -m 5 "http://127.0.0.1/readyz" >/dev/null || { log "Nginx 경유 readiness 실패"; return 1; }
+  else
+    curl -fsS -m 5 "http://${DEV_BIND_IP:?/etc/ject/host.env에 DEV_BIND_IP 필요}:8080/readyz" >/dev/null || { log "개발 게이트웨이 경유 readiness 실패"; return 1; }
+  fi
+  return 0
+}
+
+switch_to() {   # service var image
+  set_release "$2" "$3" || return 1
+  compose up -d --no-deps --wait --wait-timeout "$WAIT_TIMEOUT" "$1" || return 1
+  ready_checks "$1"
+}
+
+prune_old_images() {   # repo(digest 제외)
+  local repo="$1" keep
+  keep="$(grep -E "\"to\":\"$repo@" "$HISTORY" | grep '"result":"success"' | tail -n "$KEEP_IMAGES" | sed -E 's/.*"to":"([^"]+)".*/\1/' | sort -u)"
+  docker image ls --digests --format '{{.Repository}}@{{.Digest}} {{.ID}}' "$repo" | while read -r ref id; do
+    echo "$keep" | grep -qxF "$ref" || docker image rm "$id" >/dev/null 2>&1 || true
+  done
+}
+
+[ -f /srv/ject/app/edge.env ] && . /srv/ject/app/edge.env
+[ -f /etc/ject/host.env ] && . /etc/ject/host.env
+
+case "$CMD" in
+status)
+  echo "== $ENVN release =="; cat "$RELEASE"
+  echo "== containers =="; compose ps --format 'table {{.Service}}\t{{.Image}}\t{{.Status}}'
+  echo "== recent deploys =="; tail -n 5 "$HISTORY"
+  exit 0 ;;
+deploy|rollback) ;;
+*) die "사용법: ject-deploy deploy|rollback|status <prod|dev> ..." ;;
+esac
+
+SVC="${3:-}"; VAR="$(svc_var "$SVC")"
+exec 9>"/run/lock/ject-deploy-$ENVN.lock"
+flock -n 9 || die "$ENVN 환경에서 다른 배포가 진행 중이다 (동시 배포 금지)"
+
+if [ "$CMD" = deploy ]; then
+  NEW="${4:-}"; ACTOR="${5:-${SUDO_USER:-root}}"; REG_USER="${6:-}"
+  [[ "$NEW" =~ ^[a-z0-9.-]+(:[0-9]+)?/[a-z0-9._/-]+(:[A-Za-z0-9._-]+)?@sha256:[a-f0-9]{64}$ ]] || die "digest가 고정된 이미지 참조만 허용 (repo@sha256:...)"
+  [[ "$ALLOWED_IMAGE_PREFIX" == */* ]] || die "deploy.conf의 ALLOWED_IMAGE_PREFIX가 너무 넓다"
+  [[ "$NEW" == "$ALLOWED_IMAGE_PREFIX"* ]] || die "허용되지 않은 레지스트리: $ALLOWED_IMAGE_PREFIX 로 시작해야 한다"
+  NEW="$(echo "$NEW" | sed -E 's#(/[^:@]+):[A-Za-z0-9._-]+@#\1@#')"   # 태그 제거(레지스트리 포트는 유지), digest만 사용
+else
+  ACTOR="${4:-${SUDO_USER:-root}}"
+  # 직전 '배포' 성공 이미지들 중 현재와 다른 가장 최근 것. 롤백 기록(note=rollback)과,
+  # 최근 롤백에서 버린 이미지(from)는 후보에서 뺀다(롤백을 반복해도 나쁜 이미지로 돌아가지 않게).
+  CUR="$(current_image "$VAR")"
+  NEW="$(python3 - "$HISTORY" "$SVC" "$CUR" <<'PY'
+import json, sys
+hist, svc, cur = sys.argv[1], sys.argv[2], sys.argv[3]
+rows = [json.loads(l) for l in open(hist) if l.strip()]
+rows = [r for r in rows if r.get("service") == svc]
+bad = {r["from"] for r in rows if r.get("result") == "success" and r.get("note") == "rollback"}
+bad |= {r["to"] for r in rows if r.get("result") in ("rolled_back", "failed")}
+for r in reversed(rows):
+    if r.get("result") == "success" and r.get("note") == "deploy" and r["to"] != cur and r["to"] not in bad:
+        print(r["to"]); break
+PY
+)"
+  [ -n "$NEW" ] || die "되돌릴 이전 성공 이미지가 없다"
+fi
+ACTOR="$(echo "$ACTOR" | tr -cd 'A-Za-z0-9._:/@-' | cut -c1-80)"
+PREV="$(current_image "$VAR")"
+
+FREE_PCT=$(( 100 - $(df --output=pcent / | tail -1 | tr -dc 0-9) ))
+[ "$FREE_PCT" -ge "$MIN_FREE_PCT" ] || die "디스크 여유 ${FREE_PCT}% < ${MIN_FREE_PCT}%"
+
+log "$CMD $ENVN/$SVC: ${PREV:-<none>} -> $NEW (actor=$ACTOR)"
+pull_image() {
+  docker image inspect "$NEW" >/dev/null 2>&1 && return 0
+  if [ -n "${REG_USER:-}" ]; then
+    [[ "$REG_USER" =~ ^[A-Za-z0-9._-]+$ ]] || return 1
+    local cfg rc=0; cfg="$(mktemp -d)"
+    head -c 4096 | docker --config "$cfg" login ghcr.io -u "$REG_USER" --password-stdin >/dev/null 2>&1 || rc=1
+    [ $rc -eq 0 ] && { docker --config "$cfg" pull -q "$NEW" >/dev/null || rc=1; }
+    rm -rf "$cfg"; return $rc
+  fi
+  docker pull -q "$NEW" >/dev/null
+}
+pull_image || { record pull_failed "$SVC" "$PREV" "$NEW" "$ACTOR"; die "이미지 pull 실패"; }
+
+if switch_to "$SVC" "$VAR" "$NEW"; then
+  record success "$SVC" "$PREV" "$NEW" "$ACTOR" "$CMD"
+  log "성공"
+  prune_old_images "${NEW%@*}" || true
+  exit 0
+fi
+
+log "새 이미지 검증 실패 — 이전 이미지로 복구"
+if [ -n "$PREV" ] && switch_to "$SVC" "$VAR" "$PREV"; then
+  record rolled_back "$SVC" "$PREV" "$NEW" "$ACTOR" "새 이미지 실패, 이전 이미지 복구 확인"
+  die "배포 실패: 이전 이미지($PREV)로 복구했고 상태 확인을 통과했다"
+fi
+record failed "$SVC" "$PREV" "$NEW" "$ACTOR" "복구 실패 또는 이전 이미지 없음"
+die "배포 실패: 이전 이미지 복구도 실패했다. 수동 확인 필요"

@@ -1,0 +1,43 @@
+# 운영 앱 VM (ject-prod-app)의 진입점: Nginx + Certbot
+# 앱 배포(ject-prod)와 다른 Compose 프로젝트라서 앱을 교체해도 Nginx는 재시작되지 않는다.
+# 실행: docker compose -f prod-edge.yaml up -d
+name: ject-edge
+
+x-logging: &logging
+  driver: json-file
+  options: { max-size: "10m", max-file: "3" }
+
+services:
+  nginx:
+    image: nginx:1.30.6-alpine
+    restart: unless-stopped
+    mem_limit: 128m
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /srv/ject/app/nginx/conf.d:/etc/nginx/conf.d:ro
+      - /srv/ject/app/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - /srv/ject/app/acme:/var/www/acme:ro
+      - /srv/ject/certs:/etc/letsencrypt:ro
+    networks: [ject-prod-net]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/nginx-health || exit 1"]
+      interval: 15s
+      timeout: 3s
+      retries: 3
+    logging: *logging
+
+  # 상시 실행하지 않는다. 발급·갱신 때 `docker compose run --rm certbot ...`으로만 실행.
+  certbot:
+    image: certbot/certbot:v5.1.0
+    profiles: [certbot]
+    volumes:
+      - /srv/ject/app/acme:/var/www/acme
+      - /srv/ject/certs:/etc/letsencrypt
+    logging: *logging
+
+networks:
+  ject-prod-net:
+    name: ject-prod-net
+    external: true

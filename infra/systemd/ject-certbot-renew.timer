@@ -1,0 +1,11 @@
+[Unit]
+Description=JECT 인증서 갱신 확인 (하루 2회)
+
+[Timer]
+OnCalendar=*-*-* 03,15:17:00 Asia/Seoul
+RandomizedDelaySec=30m
+Persistent=true
+Unit=ject-certbot-renew.service
+
+[Install]
+WantedBy=timers.target

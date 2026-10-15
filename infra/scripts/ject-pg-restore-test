@@ -1,0 +1,117 @@
+#!/usr/bin/env bash
+# 백업 복원 시험: 버킷의 백업을 내려받아 격리된 임시 PostgreSQL 컨테이너(--network none)에
+# 복원하고, MANIFEST의 테이블별 행 수와 비교한다. 운영 DB에는 접근하지 않는다.
+#   ject-pg-restore-test [RUN_ID|latest]
+# 결과: /srv/ject/backup-status/restore-history.jsonl, restore-last.json
+set -euo pipefail
+umask 077
+CONF=/etc/ject/backup.conf
+[ -f "$CONF" ] && . "$CONF"
+BUCKET="${BUCKET:-ject-db-backups}"
+PREFIX="${PREFIX:-postgres/prod}"
+OCI="${OCI:-/opt/ject/oci-cli/bin/oci}"
+TMP_ROOT="${TMP_ROOT:-/srv/ject/backup-tmp}"
+PG_IMAGE="${PG_IMAGE:-postgres:17.11-bookworm}"
+STATUS_DIR=/srv/ject/backup-status
+NAME="ject-restore-test-$$"
+TARGET="${1:-latest}"
+START=$(date +%s)
+WORK="$TMP_ROOT/restore-$$"
+STAGE=init
+DETAIL=""
+
+oci_() { "$OCI" --auth instance_principal "$@"; }
+finish() {
+  local rc=$? result=success
+  [ $rc -eq 0 ] || result=failed
+  docker rm -f "$NAME" >/dev/null 2>&1 || true
+  rm -rf "$WORK"
+  local json
+  json=$(printf '{"run_id":"%s","result":"%s","stage":"%s","duration_s":%d,"time":"%s","detail":"%s"}' \
+    "${RUN_ID:-unknown}" "$result" "$STAGE" "$(( $(date +%s) - START ))" "$(date -Iseconds)" "$DETAIL")
+  install -d -m 0755 "$STATUS_DIR"
+  echo "$json" >> "$STATUS_DIR/restore-history.jsonl"
+  echo "$json" > "$STATUS_DIR/restore-last.json"
+  echo "$json"
+  exit $rc
+}
+exec 9>/run/lock/ject-pg-backup.lock
+flock -w 3600 9 || { echo "백업/복원 잠금 대기 시간 초과" >&2; exit 1; }
+trap finish EXIT
+NAMESPACE="${NAMESPACE:-$(oci_ os ns get --query data --raw-output)}"
+
+STAGE=select
+if [ "$TARGET" = latest ]; then
+  RUN_ID=$(oci_ os object list -ns "$NAMESPACE" -bn "$BUCKET" --prefix "$PREFIX/" --all --fields name \
+    | python3 -c 'import sys,json
+names=[o["name"] for o in json.load(sys.stdin).get("data",[])]
+runs=sorted({n.split("/")[-2] for n in names if n.endswith("/MANIFEST.json")})
+print(runs[-1] if runs else "")')
+else
+  RUN_ID="$TARGET"
+fi
+[ -n "$RUN_ID" ] || { DETAIL="성공한 백업 없음"; exit 1; }
+
+STAGE=download
+install -d -m 0700 "$WORK"
+oci_ os object bulk-download -ns "$NAMESPACE" -bn "$BUCKET" --prefix "$PREFIX/$RUN_ID/" --download-dir "$WORK" --overwrite >/dev/null
+D="$WORK/$PREFIX/$RUN_ID"
+M="$D/MANIFEST.json"
+[ -s "$M" ] || { DETAIL="MANIFEST 없음"; exit 1; }
+
+STAGE=checksum
+python3 - "$D" <<'PY'
+import hashlib, json, sys, os
+d = sys.argv[1]
+m = json.load(open(os.path.join(d, "MANIFEST.json")))
+files = [m["globals"]] + m["databases"]
+for f in files:
+    h = hashlib.sha256(open(os.path.join(d, f["file"]), "rb").read()).hexdigest()
+    if h != f["sha256"]:
+        sys.exit(f"checksum mismatch: {f['file']}")
+PY
+
+STAGE=start
+PW="$(head -c 24 /dev/urandom | base64 | tr -dc A-Za-z0-9)"
+docker run -d --name "$NAME" --network none --memory 768m \
+  -e POSTGRES_USER=ject_admin -e POSTGRES_PASSWORD="$PW" -e POSTGRES_DB=postgres \
+  -v "$D":/restore:ro "$PG_IMAGE" >/dev/null
+for i in $(seq 1 60); do
+  docker exec "$NAME" pg_isready -U ject_admin -d postgres -h 127.0.0.1 -q && break
+  sleep 2
+done
+docker exec "$NAME" pg_isready -U ject_admin -d postgres -h 127.0.0.1 -q
+
+STAGE=restore
+# 역할 생성: 이미 있는 관리자 역할 오류는 무시하고 나머지는 적용
+docker exec "$NAME" psql -U ject_admin -d postgres -q -f /restore/globals.sql > /dev/null 2>&1 || true
+mapfile -t ROWS < <(python3 -c 'import json,sys
+for d in json.load(open(sys.argv[1]))["databases"]: print(d["file"] + "\t" + d["name"])' "$M")
+for row in "${ROWS[@]}"; do
+  file="${row%%$'\t'*}"; db="${row#*$'\t'}"
+  if [ "$db" != postgres ]; then
+    echo 'CREATE DATABASE :"db";' | docker exec -i "$NAME" psql -U ject_admin -d postgres -qAtX -v ON_ERROR_STOP=1 -v db="$db" > /dev/null
+  fi
+  docker exec "$NAME" pg_restore -U ject_admin -d "$db" --exit-on-error --no-owner --role=ject_admin "/restore/$file"
+done
+
+STAGE=compare
+python3 - "$M" "$NAME" <<'PY'
+import json, subprocess, sys
+m = json.load(open(sys.argv[1])); name = sys.argv[2]
+bad = []
+total = 0
+for d in m["databases"]:
+    for table, expected in d["tables"].items():
+        out = subprocess.run(["docker", "exec", name, "psql", "-U", "ject_admin", "-d", d["name"], "-AtqX",
+                              "-c", f"SELECT count(*) FROM {table}"], capture_output=True, text=True)
+        got = int(out.stdout.strip() or -1)
+        total += 1
+        if got != expected:
+            bad.append(f"{d['name']}:{table} {got}!={expected}")
+if bad:
+    sys.exit("row count mismatch: " + "; ".join(bad[:10]))
+print(f"tables verified: {total}")
+PY
+DETAIL="databases=$(python3 -c 'import json,sys;print(len(json.load(open(sys.argv[1]))["databases"]))' "$M")"
+STAGE=complete

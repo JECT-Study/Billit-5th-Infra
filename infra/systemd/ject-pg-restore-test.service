@@ -1,0 +1,10 @@
+[Unit]
+Description=JECT 백업 복원 시험 (격리 임시 컨테이너)
+After=docker.service network-online.target
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/ject/bin/ject-pg-restore-test latest
+Nice=10
+TimeoutStartSec=2h

@@ -1,0 +1,27 @@
+#cloud-config
+# 최소 부트스트랩: 관리자 계정만 만든다. 나머지 설정은 infra/scripts/bootstrap-host.sh가
+# 멱등으로 적용한다(재실행·검증이 쉽도록 cloud-init에 많은 로직을 넣지 않는다).
+hostname: ${hostname}
+preserve_hostname: false
+timezone: Asia/Seoul
+groups:
+  - ject-admins
+users:
+  # 이미지 기본 계정(ubuntu)은 만들지 않는다: 공용 계정 금지, Bastion 세션으로 임의 계정 접속 방지
+  - name: ${admin_user}
+    gecos: JECT infra admin
+    shell: /bin/bash
+    groups: [ject-admins]
+    lock_passwd: true
+    ssh_authorized_keys:
+      - ${admin_ssh_public_key}
+write_files:
+  - path: /etc/sudoers.d/90-ject-admins
+    permissions: "0440"
+    content: |
+      %ject-admins ALL=(ALL) NOPASSWD:ALL
+  - path: /etc/ject/role
+    permissions: "0644"
+    content: |
+      ${role}
+# 패키지 설치는 bootstrap-host.sh에서 한다(운영 앱 VM은 예약 공인 IP 연결 전 아웃바운드가 없음).

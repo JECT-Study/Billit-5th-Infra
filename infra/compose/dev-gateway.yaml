@@ -1,0 +1,29 @@
+# 개발 VM의 게이트웨이 Nginx. 사설 IP:8080에만 바인딩하고, OCI NSG로 운영 Nginx VM만 허용한다.
+name: ject-dev-gateway
+
+x-logging: &logging
+  driver: json-file
+  options: { max-size: "10m", max-file: "3" }
+
+services:
+  nginx:
+    image: nginx:1.30.6-alpine
+    restart: unless-stopped
+    mem_limit: 128m
+    ports:
+      - "${DEV_BIND_IP:?}:8080:8080"
+    volumes:
+      - /srv/ject/dev/nginx/conf.d:/etc/nginx/conf.d:ro
+      - /srv/ject/dev/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    networks: [ject-dev-net]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8080/nginx-health || exit 1"]
+      interval: 15s
+      timeout: 3s
+      retries: 3
+    logging: *logging
+
+networks:
+  ject-dev-net:
+    name: ject-dev-net
+    external: true

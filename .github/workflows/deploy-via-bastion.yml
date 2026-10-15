@@ -1,0 +1,139 @@
+# 재사용 워크플로: OCI Bastion 관리형 SSH 세션으로 JECT VM에 접속해 ject-deploy를 실행한다.
+# - 실행마다 임시 SSH 키, 세션 TTL 30분, 끝나면 세션 삭제(장기 SSH 키 없음). SSH 22는 인터넷에 열지 않는다.
+# - OCI 자격증명은 GitHub Environment(development / production)별 비밀값이다. 환경마다 다른 OCI CI 사용자이며,
+#   각 사용자는 IAM으로 자기 VM·deploy 계정 세션만 만들 수 있다(infra/oci/storage_iam.tf).
+# - 운영 배포는 같은 digest가 개발에 성공 배포됐다는 커밋 상태(ject/dev-verified)가 있어야 진행한다.
+# - GHCR pull은 이 작업의 GITHUB_TOKEN(packages:read)으로 배포 순간에만 로그인한다.
+# 입력값은 run 스크립트에 직접 넣지 않고 env로만 전달한다(스크립트 주입 방지).
+#
+# Environment 설정 (development, production 각각):
+#   secrets: OCI_CLI_USER, OCI_CLI_TENANCY, OCI_CLI_FINGERPRINT, OCI_CLI_KEY_CONTENT
+#   vars:    OCI_CLI_REGION, JECT_BASTION_ID, JECT_INSTANCE_ID, JECT_PRIVATE_IP, JECT_HOST_KEY, JECT_IMAGE_PREFIX
+#   production은 Required reviewers와 배포 브랜치 제한을 둔다.
+name: deploy-via-bastion
+
+on:
+  workflow_call:
+    inputs:
+      environment: { type: string, required: true, description: "dev | prod" }
+      service:     { type: string, required: false, default: be }
+      image:       { type: string, required: false, default: "", description: "ghcr.io/<owner>/ject-...@sha256:..." }
+      action:      { type: string, required: false, default: deploy, description: "deploy | rollback" }
+      commit:      { type: string, required: false, default: "", description: "운영 배포 시 이미지를 만든 커밋 SHA" }
+
+permissions:
+  contents: read
+  packages: read
+  statuses: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+    environment: ${{ inputs.environment == 'prod' && 'production' || 'development' }}
+    concurrency:
+      group: ject-deploy-${{ inputs.environment }}
+      cancel-in-progress: false
+    env:
+      ENVN: ${{ inputs.environment }}
+      SVC: ${{ inputs.service }}
+      IMAGE: ${{ inputs.image }}
+      ACTION: ${{ inputs.action }}
+      COMMIT: ${{ inputs.commit }}
+      PREFIX: ${{ vars.JECT_IMAGE_PREFIX }}
+    steps:
+      - name: Validate inputs
+        run: |
+          set -euo pipefail
+          [[ "$ENVN" =~ ^(dev|prod)$ ]] || { echo "bad environment"; exit 1; }
+          [[ "$SVC" =~ ^(be|fe)$ ]] || { echo "bad service"; exit 1; }
+          [[ "$ACTION" =~ ^(deploy|rollback)$ ]] || { echo "bad action"; exit 1; }
+          if [ "$ACTION" = deploy ]; then
+            [[ -n "$PREFIX" && "$PREFIX" == ghcr.io/*/ject-* ]] || { echo "JECT_IMAGE_PREFIX 변수 필요 (ghcr.io/<owner>/ject-)"; exit 1; }
+            [[ "$IMAGE" =~ ^ghcr\.io/[a-z0-9._/-]+@sha256:[a-f0-9]{64}$ && "$IMAGE" == "$PREFIX"* ]] || { echo "image must be ${PREFIX}...@sha256:<digest>"; exit 1; }
+          fi
+
+      - name: Require dev verification for prod
+        if: inputs.environment == 'prod' && inputs.action == 'deploy'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          [[ "$COMMIT" =~ ^[0-9a-f]{40}$ ]] || { echo "운영 배포에는 commit(40자 SHA)이 필요"; exit 1; }
+          digest="${IMAGE#*@}"
+          gh api "repos/$REPO/commits/$COMMIT/statuses" --paginate \
+            --jq '.[] | select(.context=="ject/dev-verified" and .state=="success") | .description' \
+            | grep -qxF "$digest" || { echo "이 digest는 개발 환경 검증 기록이 없다"; exit 1; }
+
+      - name: Install OCI CLI
+        run: pipx install oci-cli==3.95.0
+
+      - name: Create bastion session
+        id: session
+        env:
+          OCI_CLI_USER: ${{ secrets.OCI_CLI_USER }}
+          OCI_CLI_TENANCY: ${{ secrets.OCI_CLI_TENANCY }}
+          OCI_CLI_FINGERPRINT: ${{ secrets.OCI_CLI_FINGERPRINT }}
+          OCI_CLI_KEY_CONTENT: ${{ secrets.OCI_CLI_KEY_CONTENT }}
+          OCI_CLI_REGION: ${{ vars.OCI_CLI_REGION }}
+          BASTION_ID: ${{ vars.JECT_BASTION_ID }}
+          INSTANCE_ID: ${{ vars.JECT_INSTANCE_ID }}
+          TARGET_IP: ${{ vars.JECT_PRIVATE_IP }}
+        run: |
+          set -euo pipefail
+          ssh-keygen -q -t ed25519 -N '' -f "$RUNNER_TEMP/k" -C "gha-${GITHUB_RUN_ID}"
+          sid=$(oci bastion session create-managed-ssh \
+            --bastion-id "$BASTION_ID" --target-resource-id "$INSTANCE_ID" \
+            --target-os-username deploy --target-private-ip "$TARGET_IP" \
+            --ssh-public-key-file "$RUNNER_TEMP/k.pub" --session-ttl 1800 \
+            --display-name "gha-${GITHUB_RUN_ID}-${ENVN}" --query 'data.id' --raw-output)
+          echo "id=$sid" >> "$GITHUB_OUTPUT"
+          for _ in $(seq 1 60); do
+            st=$(oci bastion session get --session-id "$sid" --query 'data."lifecycle-state"' --raw-output)
+            [ "$st" = ACTIVE ] && break
+            [[ "$st" =~ ^(FAILED|DELETED|DELETING)$ ]] && { echo "session $st"; exit 1; }
+            sleep 5
+          done
+          [ "$st" = ACTIVE ]
+
+      - name: Run ject-deploy on target
+        env:
+          SID: ${{ steps.session.outputs.id }}
+          TARGET_IP: ${{ vars.JECT_PRIVATE_IP }}
+          TARGET_HOST_KEY: ${{ vars.JECT_HOST_KEY }}
+          REGION: ${{ vars.OCI_CLI_REGION }}
+          GHCR_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          printf '%s %s\n' "$TARGET_IP" "$TARGET_HOST_KEY" > "$RUNNER_TEMP/known_hosts"
+          PROXY="ssh -i $RUNNER_TEMP/k -W %h:%p -p 22 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=$RUNNER_TEMP/bastion_known_hosts ${SID}@host.bastion.${REGION}.oci.oraclecloud.com"
+          ACTOR="gha-${GITHUB_RUN_ID}"
+          if [ "$ACTION" = deploy ]; then
+            REMOTE=(sudo /opt/ject/bin/ject-deploy deploy "$ENVN" "$SVC" "$IMAGE" "$ACTOR" "$GITHUB_ACTOR")
+          else
+            REMOTE=(sudo /opt/ject/bin/ject-deploy rollback "$ENVN" "$SVC" "$ACTOR")
+          fi
+          printf '%s' "$GHCR_TOKEN" | ssh -i "$RUNNER_TEMP/k" \
+            -o UserKnownHostsFile="$RUNNER_TEMP/known_hosts" -o StrictHostKeyChecking=yes \
+            -o ProxyCommand="$PROXY" "deploy@${TARGET_IP}" "${REMOTE[*]}"
+
+      - name: Mark digest as verified in dev
+        if: inputs.environment == 'dev' && inputs.action == 'deploy'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ inputs.commit || github.sha }}
+        run: |
+          gh api "repos/$REPO/statuses/$SHA" -f state=success -f context=ject/dev-verified \
+            -f description="${IMAGE#*@}" >/dev/null
+
+      - name: Delete bastion session
+        if: always() && steps.session.outputs.id != ''
+        env:
+          OCI_CLI_USER: ${{ secrets.OCI_CLI_USER }}
+          OCI_CLI_TENANCY: ${{ secrets.OCI_CLI_TENANCY }}
+          OCI_CLI_FINGERPRINT: ${{ secrets.OCI_CLI_FINGERPRINT }}
+          OCI_CLI_KEY_CONTENT: ${{ secrets.OCI_CLI_KEY_CONTENT }}
+          OCI_CLI_REGION: ${{ vars.OCI_CLI_REGION }}
+          SID: ${{ steps.session.outputs.id }}
+        run: oci bastion session delete --session-id "$SID" --force || true

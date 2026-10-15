@@ -1,0 +1,153 @@
+#!/usr/bin/env bash
+# 운영 PostgreSQL 일일 논리 백업 → 비공개 Object Storage 버킷 (운영 데이터 VM에서 root로 실행)
+#  - DB별 pg_dump custom format + 역할(globals) + 테이블별 행 수가 담긴 MANIFEST.json
+#  - 행 수는 pg_dump와 같은 스냅숏(pg_export_snapshot)에서 센다 → 복원 시험이 동시 쓰기에 흔들리지 않음
+#  - 데이터 파일 업로드·원격 크기 확인이 끝난 뒤 MANIFEST.json을 마지막에 올린다(= 성공 표식)
+#  - 보존: 성공한 실행 기준 최근 RETAIN_DAYS(7)일. 7일보다 오래됐어도 최신 성공 RETAIN_MIN개는 남긴다
+#    (백업이 며칠 실패해도 마지막 정상 사본이 지워지지 않음). MANIFEST 없는 실패 잔여물은 1일 뒤 정리
+#  - 결과: /srv/ject/backup-status/last.json, last-success.json, history.jsonl (실패 시 종료 코드 1)
+# 인증: OCI Instance Principal (동적 그룹 ject-prod-data-dg, 백업 버킷에만 권한)
+set -euo pipefail
+umask 077
+
+CONF=/etc/ject/backup.conf
+# shellcheck disable=SC1090
+[ -f "$CONF" ] && . "$CONF"
+BUCKET="${BUCKET:-ject-db-backups}"
+PREFIX="${PREFIX:-postgres/prod}"
+RETAIN_DAYS="${RETAIN_DAYS:-7}"
+RETAIN_MIN="${RETAIN_MIN:-${RETAIN:-7}}"
+PG_CONTAINER="${PG_CONTAINER:-ject-prod-data-postgres-1}"
+PG_USER="${PG_USER:-ject_admin}"
+OCI="${OCI:-/opt/ject/oci-cli/bin/oci}"
+TMP_ROOT="${TMP_ROOT:-/srv/ject/backup-tmp}"
+STATUS_DIR=/srv/ject/backup-status
+
+RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
+WORK="$TMP_ROOT/$RUN_ID"
+START=$(date +%s)
+STAGE=init
+TOTAL_BYTES=0
+
+oci_() { "$OCI" --auth instance_principal "$@"; }
+finish() {
+  local rc=$? result=success
+  [ $rc -eq 0 ] || result=failed
+  local json
+  json=$(printf '{"run_id":"%s","result":"%s","stage":"%s","duration_s":%d,"bytes":%s,"time":"%s","bucket":"%s","prefix":"%s"}' \
+    "$RUN_ID" "$result" "$STAGE" "$(( $(date +%s) - START ))" "$TOTAL_BYTES" "$(date -Iseconds)" "$BUCKET" "$PREFIX/$RUN_ID")
+  install -d -m 0755 "$STATUS_DIR"
+  echo "$json" >> "$STATUS_DIR/history.jsonl"
+  [ "$result" = success ] && echo "$json" > "$STATUS_DIR/last-success.json"
+  echo "$json" > "$STATUS_DIR/last.json"
+  rm -rf "$WORK"
+  echo "$json"
+  exit $rc
+}
+trap finish EXIT
+
+STAGE=lock
+exec 9>/run/lock/ject-pg-backup.lock
+flock -w 3600 9 || { echo "다른 백업/복원 시험이 1시간 넘게 실행 중" >&2; exit 1; }
+
+STAGE=wait-db
+for _ in $(seq 1 60); do
+  docker exec "$PG_CONTAINER" pg_isready -U "$PG_USER" -d postgres -h 127.0.0.1 -q 2>/dev/null && break
+  sleep 5
+done
+docker exec "$PG_CONTAINER" pg_isready -U "$PG_USER" -d postgres -h 127.0.0.1 -q
+[ -n "${NAMESPACE:-}" ] || NAMESPACE="$(oci_ os ns get --query data --raw-output)"
+
+STAGE=dump
+install -d -m 0700 "$WORK"
+psqlq() { docker exec -i "$PG_CONTAINER" psql -U "$PG_USER" -d "$1" -AtqX -v ON_ERROR_STOP=1 -c "$2"; }
+PG_VERSION="$(psqlq postgres 'SHOW server_version')"
+mapfile -t DBS < <(psqlq postgres "SELECT datname FROM pg_database WHERE datallowconn AND NOT datistemplate ORDER BY 1")
+docker exec "$PG_CONTAINER" pg_dumpall -U "$PG_USER" --globals-only > "$WORK/globals.sql"
+
+COUNT_SQL="SELECT coalesce(json_object_agg(t, n), '{}'::json) FROM (
+  SELECT format('%I.%I', schemaname, relname) AS t,
+         (xpath('/row/c/text()', query_to_xml(format('SELECT count(*) AS c FROM %I.%I', schemaname, relname), false, true, '')))[1]::text::bigint AS n
+  FROM pg_stat_user_tables) s;"
+: > "$WORK/dbs.tsv"
+i=0
+for db in "${DBS[@]}"; do
+  i=$((i+1)); key="db$i"     # 파일 이름은 DB 이름과 무관한 안전한 키
+  # 같은 스냅숏: 반복 읽기 트랜잭션을 열어 스냅숏을 내보내고, pg_dump와 행 수 쿼리가 그 스냅숏을 쓴다.
+  coproc PSQL { docker exec -i "$PG_CONTAINER" psql -U "$PG_USER" -d "$db" -AtqX -v ON_ERROR_STOP=1; }
+  echo "BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY; SELECT pg_export_snapshot();" >&"${PSQL[1]}"
+  read -r -t 60 SNAP <&"${PSQL[0]}"
+  [ -n "$SNAP" ] || { echo "스냅숏 실패: $db" >&2; exit 1; }
+  docker exec "$PG_CONTAINER" pg_dump -U "$PG_USER" -d "$db" -Fc -Z 6 --snapshot="$SNAP" > "$WORK/$key.dump"
+  echo "$COUNT_SQL" >&"${PSQL[1]}"
+  read -r -t 600 COUNTS <&"${PSQL[0]}"
+  echo "COMMIT;" >&"${PSQL[1]}"
+  eval "exec ${PSQL[1]}>&-"
+  wait "$PSQL_PID" || true
+  docker exec -i "$PG_CONTAINER" pg_restore --list < "$WORK/$key.dump" > /dev/null   # 덤프가 읽히는지
+  printf '%s\t%s\t%s\n' "$key" "$db" "$COUNTS" >> "$WORK/dbs.tsv"
+done
+
+python3 - "$WORK" "$RUN_ID" "$PG_VERSION" <<'PY'
+import hashlib, json, os, sys
+work, run_id, ver = sys.argv[1:4]
+sha = lambda p: hashlib.sha256(open(p, "rb").read()).hexdigest()
+dbs = []
+for line in open(os.path.join(work, "dbs.tsv"), encoding="utf-8"):
+    key, name, counts = line.rstrip("\n").split("\t", 2)
+    f = os.path.join(work, key + ".dump")
+    dbs.append({"name": name, "file": key + ".dump", "sha256": sha(f), "bytes": os.path.getsize(f), "tables": json.loads(counts)})
+m = {"run_id": run_id, "pg_version": ver,
+     "globals": {"file": "globals.sql", "sha256": sha(os.path.join(work, "globals.sql"))}, "databases": dbs}
+json.dump(m, open(os.path.join(work, "MANIFEST.json.pending"), "w"), ensure_ascii=False, indent=1)
+PY
+rm -f "$WORK/dbs.tsv"
+TOTAL_BYTES=$(du -sb "$WORK" | cut -f1)
+
+STAGE=upload
+for f in "$WORK"/*.dump "$WORK/globals.sql"; do
+  oci_ os object put -ns "$NAMESPACE" -bn "$BUCKET" --name "$PREFIX/$RUN_ID/$(basename "$f")" --file "$f" --no-overwrite >/dev/null
+done
+
+STAGE=verify
+for f in "$WORK"/*.dump "$WORK/globals.sql"; do
+  remote=$(oci_ os object head -ns "$NAMESPACE" -bn "$BUCKET" --name "$PREFIX/$RUN_ID/$(basename "$f")" \
+    | python3 -c 'import sys,json;print(json.load(sys.stdin)["content-length"])')
+  [ "$remote" = "$(stat -c %s "$f")" ] || { echo "원격 크기 불일치: $(basename "$f")" >&2; exit 1; }
+done
+
+STAGE=commit
+oci_ os object put -ns "$NAMESPACE" -bn "$BUCKET" --name "$PREFIX/$RUN_ID/MANIFEST.json" --file "$WORK/MANIFEST.json.pending" --no-overwrite >/dev/null
+oci_ os object head -ns "$NAMESPACE" -bn "$BUCKET" --name "$PREFIX/$RUN_ID/MANIFEST.json" >/dev/null
+
+STAGE=retention
+oci_ os object list -ns "$NAMESPACE" -bn "$BUCKET" --prefix "$PREFIX/" --all --fields name > "$WORK/objects.json"
+python3 - "$RETAIN_DAYS" "$RETAIN_MIN" "$RUN_ID" "$WORK/objects.json" > "$WORK/delete.txt" <<'PY'
+import json, sys, datetime as dt
+days, keep_min, current = int(sys.argv[1]), int(sys.argv[2]), sys.argv[3]
+raw = open(sys.argv[4]).read().strip()
+names = [o["name"] for o in (json.loads(raw).get("data", []) if raw else [])]
+runs = {}
+for n in names:
+    parts = n.split("/")
+    runs.setdefault(parts[-2], set()).add(parts[-1])
+now = dt.datetime.now(dt.timezone.utc)
+def age(r):
+    try: return now - dt.datetime.strptime(r, "%Y%m%dT%H%M%SZ").replace(tzinfo=dt.timezone.utc)
+    except ValueError: return dt.timedelta(0)   # 형식이 다르면 지우지 않는다
+ok = sorted(r for r, f in runs.items() if "MANIFEST.json" in f)
+protected = set(ok[-keep_min:])
+for r in ok:
+    if r not in protected and age(r) > dt.timedelta(days=days):
+        print(r)
+for r, f in runs.items():
+    if "MANIFEST.json" not in f and r != current and age(r) > dt.timedelta(days=1):
+        print(r)
+PY
+while read -r old; do
+  [ -n "$old" ] || continue
+  oci_ os object bulk-delete -ns "$NAMESPACE" -bn "$BUCKET" --prefix "$PREFIX/$old/" --force >/dev/null
+  echo "보존 기간 지난 백업 삭제: $old"
+done < "$WORK/delete.txt"
+
+STAGE=complete

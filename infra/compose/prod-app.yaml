@@ -1,0 +1,51 @@
+# 운영 앱 VM (ject-prod-app)의 애플리케이션. 이미지 참조는 release.env(배포 스크립트가 관리)에서 받는다.
+# 실행은 /opt/ject/bin/ject-deploy가 담당한다. 직접 실행 시:
+#   docker compose -f prod-app.yaml --env-file /srv/ject/app/release.env up -d --no-deps be
+# 앱 코드가 아직 없으므로 be는 배포 경로 검증용 ject-smoke 이미지로 시작한다(실제 JECT 앱 아님).
+name: ject-prod
+
+x-logging: &logging
+  driver: json-file
+  options: { max-size: "10m", max-file: "3" }
+
+services:
+  be:
+    image: ${JECT_BE_IMAGE:?}
+    restart: unless-stopped
+    stop_grace_period: 30s
+    mem_limit: 2048m
+    env_file:
+      - /srv/ject/secrets/prod-be.env
+    environment:
+      APP_ENV: prod
+      PORT: "8080"
+      TZ: Asia/Seoul
+      # Spring Boot 앱이 들어오면 JAVA_TOOL_OPTIONS로 heap 상한을 둔다(설계: 최대 1,024MiB부터).
+      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=50 -XX:+ExitOnOutOfMemoryError"
+    secrets: [redis_password]
+    networks: [ject-prod-net]
+    # 호스트 포트를 열지 않는다. Nginx가 같은 네트워크에서 be:8080으로 접근한다.
+    # 컨테이너 healthcheck는 이미지의 HEALTHCHECK를 사용한다(앱 이미지에 반드시 정의).
+    logging: *logging
+
+  # 프론트가 SSR 런타임이면 사용한다(정적이면 Nginx가 직접 제공). 현재 미정.
+  fe:
+    image: ${JECT_FE_IMAGE:-busybox:stable}
+    profiles: [fe]
+    restart: unless-stopped
+    mem_limit: 768m
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+    networks: [ject-prod-net]
+    logging: *logging
+
+secrets:
+  # 운영 앱 VM에 둔 사본. 소유자는 앱 컨테이너 UID(setup-secrets.sh의 APP_UID), 권한 0400.
+  redis_password:
+    file: /srv/ject/secrets/app_redis_password
+
+networks:
+  ject-prod-net:
+    name: ject-prod-net
+    external: true
