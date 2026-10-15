@@ -1,0 +1,10 @@
+[Unit]
+Description=JECT 백업·복원 시험 결과를 Node Exporter textfile 지표로 기록
+After=local-fs.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/ject/bin/ject-backup-metrics
+
+[Install]
+WantedBy=multi-user.target

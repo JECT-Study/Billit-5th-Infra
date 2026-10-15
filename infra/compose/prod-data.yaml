@@ -61,8 +61,8 @@ services:
     image: redis:7.4.11-alpine
     restart: unless-stopped
     mem_limit: 512m
-    # 용도(캐시/세션/업무 상태)가 확정되기 전이므로 삭제 가능한 캐시로 취급하지 않는다:
-    # AOF 영속 + noeviction. 용도가 정해지면 정책을 다시 정한다.
+    # 팀 명세: Redis는 "캐시 등" → maxmemory-policy allkeys-lru(가득 차면 오래 안 쓴 키부터 지움, 2026-10-15 변경).
+    # AOF(everysec)는 유지한다. 지워지면 안 되는 값(세션·잠금 등)을 넣게 되면 volatile-lru + 그 외 키 TTL로 바꾼다.
     command: ["redis-server", "/run/secrets/redis_conf"]
     secrets: [redis_conf, redis_password]
     volumes:

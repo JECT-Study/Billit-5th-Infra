@@ -40,11 +40,18 @@ server:
 
 management:
   server:
-    port: 8081                    # actuator는 컨테이너 안의 별도 포트(밖으로 열지 않음). Nginx도 /actuator를 막는다.
+    port: 8081                    # actuator는 별도 포트(서버는 호스트 127.0.0.1:18081로만 연다). Nginx도 /actuator를 막는다.
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health,info,prometheus   # prometheus: 서버의 Alloy가 30초마다 수집 → Grafana
+  metrics:
+    tags:
+      application: ${spring.application.name}
+    distribution:
+      # 응답 시간 p95를 서버에서 계산할 구간(SLO 버킷). 전체 히스토그램보다 시계열 수가 훨씬 적다.
+      slo:
+        http.server.requests: 100ms,300ms,500ms,1s,2s,5s
   endpoint:
     health:
       probes:
@@ -58,3 +65,10 @@ management:
         liveness:
           include: livenessState
           additional-path: "server:/healthz"
+
+# API 문서(Swagger, 팀 명세 "임시 사용"): 기본은 끔. 로컬·개발 프로필에서만 켠다(application-local/dev.yml).
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false

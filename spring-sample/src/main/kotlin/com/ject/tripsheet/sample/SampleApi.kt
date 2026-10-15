@@ -12,12 +12,21 @@ import org.springframework.web.bind.annotation.RestController
 
 // 검증용 샘플(템플릿에 포함하지 않음): DB 쓰기·Redis 쓰기가 실제로 되는지 확인한다.
 @RestController
-class SampleApi(private val jdbc: JdbcTemplate, private val redis: StringRedisTemplate, @Value("\${APP_VERSION:dev}") private val version: String) {
+class SampleApi(
+    private val jdbc: JdbcTemplate,
+    private val redis: StringRedisTemplate,
+    @Value("\${APP_VERSION:dev}") private val version: String,
+) {
     @GetMapping("/api/ping")
     fun ping(): Map<String, Any?> {
         jdbc.update("insert into sample_ping default values")
         val n = redis.opsForValue().increment("sample:ping")
-        return mapOf("status" to "ok", "version" to version, "rows" to jdbc.queryForObject("select count(*) from sample_ping", Long::class.java), "redisCounter" to n)
+        return mapOf(
+            "status" to "ok",
+            "version" to version,
+            "rows" to jdbc.queryForObject("select count(*) from sample_ping", Long::class.java),
+            "redisCounter" to n,
+        )
     }
 }
 
@@ -25,8 +34,11 @@ class SampleApi(private val jdbc: JdbcTemplate, private val redis: StringRedisTe
 class SampleSecurityConfig {
     @Bean
     fun sampleSecurityFilterChain(http: HttpSecurity): SecurityFilterChain {
-        http.authorizeHttpRequests { it.requestMatchers("/api/ping").permitAll(); it.anyRequest().authenticated() }
-            .csrf { it.disable() }
+        http
+            .authorizeHttpRequests {
+                it.requestMatchers("/api/ping").permitAll()
+                it.anyRequest().authenticated()
+            }.csrf { it.disable() }
         return http.build()
     }
 }

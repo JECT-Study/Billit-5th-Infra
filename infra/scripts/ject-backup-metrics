@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# 백업·복원 시험 결과(/srv/ject/backup-status/*.json)를 Node Exporter textfile 지표로 쓴다(백업 실패 알림용).
+#   ject-pg-backup.service / ject-pg-restore-test.service 의 ExecStopPost(성공·실패 모두), 부팅 후 1회 실행.
+# 출력: /var/lib/ject/textfile/ject_backup.prom (원자적 교체). 값만 쓰고 비밀값·버킷 내용은 쓰지 않는다.
+set -euo pipefail
+STATUS_DIR="${STATUS_DIR:-/srv/ject/backup-status}"
+OUT_DIR="${OUT_DIR:-/var/lib/ject/textfile}"
+install -d -m 0755 "$OUT_DIR"
+tmp="$(mktemp "$OUT_DIR/.ject_backup.XXXXXX")"
+python3 - "$STATUS_DIR" > "$tmp" <<'PY'
+import datetime as dt, json, os, sys
+d = sys.argv[1]
+
+def load(name):
+    try:
+        with open(os.path.join(d, name)) as f:
+            return json.loads(f.read().strip() or "null")
+    except (OSError, ValueError):
+        return None
+
+def ts(j):
+    try:
+        return int(dt.datetime.fromisoformat(j["time"]).timestamp())
+    except Exception:
+        return None
+
+out = []
+def metric(name, help_, value):
+    if value is None:
+        return
+    out.append(f"# HELP {name} {help_}\n# TYPE {name} gauge\n{name} {value}")
+
+last, ok, rl = load("last.json"), load("last-success.json"), load("restore-last.json")
+if last:
+    metric("ject_backup_last_run_timestamp_seconds", "마지막 백업 실행 시각", ts(last))
+    metric("ject_backup_last_run_success", "마지막 백업 결과(1 성공, 0 실패)", 1 if last.get("result") == "success" else 0)
+    metric("ject_backup_last_duration_seconds", "마지막 백업 소요 시간", last.get("duration_s"))
+if ok:
+    metric("ject_backup_last_success_timestamp_seconds", "마지막 백업 성공 시각", ts(ok))
+    metric("ject_backup_last_success_bytes", "마지막 성공 백업 크기", ok.get("bytes"))
+if rl:
+    metric("ject_restore_test_last_run_timestamp_seconds", "마지막 복원 시험 시각", ts(rl))
+    metric("ject_restore_test_last_run_success", "마지막 복원 시험 결과(1 성공, 0 실패)", 1 if rl.get("result") == "success" else 0)
+print("\n".join(out))
+PY
+chmod 0644 "$tmp"
+mv -f "$tmp" "$OUT_DIR/ject_backup.prom"
+echo "ject-backup-metrics: $(grep -E '^ject_(backup_last_run_success|restore_test_last_run_success) ' "$OUT_DIR/ject_backup.prom" | tr '\n' ' ')"

@@ -1,0 +1,548 @@
+# 생성 파일: infra/observability/grafana/generate.py 로 다시 만든다(직접 수정 금지).
+apiVersion: 1
+groups:
+  - orgId: 1
+    name: "ject-infra"
+    folder: "JECT"
+    interval: "1m"
+    rules:
+      - uid: "ject-host-down"
+        title: "서버 지표 끊김"
+        condition: "C"
+        data:
+          - refId: "A"
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: "prom"
+            model:
+              refId: "A"
+              expr: "(label_replace(vector(1), \"host\", \"prod-app\", \"\", \"\") or label_replace(vector(1), \"host\", \"prod-data\", \"\", \"\") or label_replace(vector(1), \"host\", \"dev\", \"\", \"\")) unless on(host) (last_over_time(up{job=\"node\"}[2m]) == 1)"
+              instant: true
+              intervalMs: 30000
+              maxDataPoints: 43200
+          - refId: "C"
+            datasourceUid: "__expr__"
+            model:
+              refId: "C"
+              type: "threshold"
+              expression: "A"
+              conditions:
+                - evaluator:
+                    type: "gt"
+                    params:
+                      - 0
+        noDataState: "OK"
+        execErrState: "Alerting"
+        for: "2m"
+        labels:
+          severity: "critical"
+        annotations:
+          summary: "{{ $labels.host }} 서버의 지표가 2분 넘게 들어오지 않습니다"
+          description: "VM 정지, Alloy·Node Exporter 중지, 개발·모니터링 VM으로 가는 네트워크(NSG 9090) 문제일 수 있습니다. docker compose -p ject-agent ps, OCI 콘솔 인스턴스 상태를 확인하세요."
+        isPaused: false
+      - uid: "ject-disk-80"
+        title: "디스크 80% 초과"
+        condition: "C"
+        data:
+          - refId: "A"
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: "prom"
+            model:
+              refId: "A"
+              expr: "100 * (1 - node_filesystem_avail_bytes{mountpoint=\"/\"} / node_filesystem_size_bytes{mountpoint=\"/\"})"
+              instant: true
+              intervalMs: 30000
+              maxDataPoints: 43200
+          - refId: "C"
+            datasourceUid: "__expr__"
+            model:
+              refId: "C"
+              type: "threshold"
+              expression: "A"
+              conditions:
+                - evaluator:
+                    type: "gt"
+                    params:
+                      - 80
+        noDataState: "OK"
+        execErrState: "Alerting"
+        for: "5m"
+        labels:
+          severity: "warning"
+        annotations:
+          summary: "{{ $labels.host }} 디스크 사용률 {{ $values.A.Value }}%"
+          description: "로그·이미지·DB 증가량을 확인하세요(docker system df, du -sh /srv/ject/*). 무료 블록 200GB를 다 써서 디스크를 늘릴 수 없습니다."
+        isPaused: false
+      - uid: "ject-disk-90"
+        title: "디스크 90% 초과"
+        condition: "C"
+        data:
+          - refId: "A"
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: "prom"
+            model:
+              refId: "A"
+              expr: "100 * (1 - node_filesystem_avail_bytes{mountpoint=\"/\"} / node_filesystem_size_bytes{mountpoint=\"/\"})"
+              instant: true
+              intervalMs: 30000
+              maxDataPoints: 43200
+          - refId: "C"
+            datasourceUid: "__expr__"
+            model:
+              refId: "C"
+              type: "threshold"
+              expression: "A"
+              conditions:
+                - evaluator:
+                    type: "gt"
+                    params:
+                      - 90
+        noDataState: "OK"
+        execErrState: "Alerting"
+        for: "2m"
+        labels:
+          severity: "critical"
+        annotations:
+          summary: "{{ $labels.host }} 디스크 사용률 {{ $values.A.Value }}% (긴급)"
+          description: "배포는 여유 15% 미만에서 거부됩니다. 오래된 이미지·로그를 정리하세요(실행·복구용 이미지는 남김)."
+        isPaused: false
+      - uid: "ject-memory-low"
+        title: "가용 메모리 15% 미만"
+        condition: "C"
+        data:
+          - refId: "A"
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: "prom"
+            model:
+              refId: "A"
+              expr: "100 * node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes"
+              instant: true
+              intervalMs: 30000
+              maxDataPoints: 43200
+          - refId: "C"
+            datasourceUid: "__expr__"
+            model:
+              refId: "C"
+              type: "threshold"
+              expression: "A"
+              conditions:
+                - evaluator:
+                    type: "lt"
+                    params:
+                      - 15
+        noDataState: "OK"
+        execErrState: "Alerting"
+        for: "5m"
+        labels:
+          severity: "warning"
+        annotations:
+          summary: "{{ $labels.host }} 가용 메모리 {{ $values.A.Value }}%"
+          description: "컨테이너별 사용량(docker stats --no-stream)과 메모리 상한을 확인하세요."
+        isPaused: false
+      - uid: "ject-cpu-high"
+        title: "CPU 85% 초과(10분)"
+        condition: "C"
+        data:
+          - refId: "A"
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: "prom"
+            model:
+              refId: "A"
+              expr: "100 * (1 - avg by(host) (rate(node_cpu_seconds_total{mode=\"idle\"}[5m])))"
+              instant: true
+              intervalMs: 30000
+              maxDataPoints: 43200
+          - refId: "C"
+            datasourceUid: "__expr__"
+            model:
+              refId: "C"
+              type: "threshold"
+              expression: "A"
+              conditions:
+                - evaluator:
+                    type: "gt"
+                    params:
+                      - 85
+        noDataState: "OK"
+        execErrState: "Alerting"
+        for: "10m"
+        labels:
+          severity: "warning"
+        annotations:
+          summary: "{{ $labels.host }} CPU 사용률 {{ $values.A.Value }}%"
+          description: "VM당 1 OCPU입니다. 개발 앱·백업·부하 시험이 겹쳤는지 확인하세요."
+        isPaused: false
+  - orgId: 1
+    name: "ject-backup"
+    folder: "JECT"
+    interval: "1m"
+    rules:
+      - uid: "ject-backup-failed"
+        title: "운영 DB 백업 실패"
+        condition: "C"
+        data:
+          - refId: "A"
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: "prom"
+            model:
+              refId: "A"
+              expr: "1 - ject_backup_last_run_success"
+              instant: true
+              intervalMs: 30000
+              maxDataPoints: 43200
+          - refId: "C"
+            datasourceUid: "__expr__"
+            model:
+              refId: "C"
+              type: "threshold"
+              expression: "A"
+              conditions:
+                - evaluator:
+                    type: "gt"
+                    params:
+                      - 0
+        noDataState: "OK"
+        execErrState: "Alerting"
+        for: "0s"
+        labels:
+          severity: "critical"
+        annotations:
+          summary: "운영 DB 백업이 실패했습니다"
+          description: "운영 데이터 VM: sudo cat /srv/ject/backup-status/last.json, journalctl -u ject-pg-backup. 고친 뒤 sudo systemctl start ject-pg-backup 으로 다시 실행하세요."
+        isPaused: false
+      - uid: "ject-backup-stale"
+        title: "운영 DB 백업 26시간 넘게 성공 없음"
+        condition: "C"
+        data:
+          - refId: "A"
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: "prom"
+            model:
+              refId: "A"
+              expr: "((time() - ject_backup_last_success_timestamp_seconds) / 3600) or on() (999 * absent(ject_backup_last_success_timestamp_seconds))"
+              instant: true
+              intervalMs: 30000
+              maxDataPoints: 43200
+          - refId: "C"
+            datasourceUid: "__expr__"
+            model:
+              refId: "C"
+              type: "threshold"
+              expression: "A"
+              conditions:
+                - evaluator:
+                    type: "gt"
+                    params:
+                      - 26
+        noDataState: "OK"
+        execErrState: "Alerting"
+        for: "0s"
+        labels:
+          severity: "critical"
+        annotations:
+          summary: "마지막 백업 성공 후 {{ $values.A.Value }}시간(999는 백업 지표 없음)"
+          description: "매일 04:00 KST 백업이 돌지 않았거나 실패했습니다. ject-pg-backup.timer와 백업 지표 파일(/var/lib/ject/textfile)을 확인하세요."
+        isPaused: false
+      - uid: "ject-restore-test-failed"
+        title: "백업 복원 시험 실패"
+        condition: "C"
+        data:
+          - refId: "A"
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: "prom"
+            model:
+              refId: "A"
+              expr: "1 - ject_restore_test_last_run_success"
+              instant: true
+              intervalMs: 30000
+              maxDataPoints: 43200
+          - refId: "C"
+            datasourceUid: "__expr__"
+            model:
+              refId: "C"
+              type: "threshold"
+              expression: "A"
+              conditions:
+                - evaluator:
+                    type: "gt"
+                    params:
+                      - 0
+        noDataState: "OK"
+        execErrState: "Alerting"
+        for: "0s"
+        labels:
+          severity: "critical"
+        annotations:
+          summary: "월간 백업 복원 시험이 실패했습니다"
+          description: "운영 데이터 VM: sudo cat /srv/ject/backup-status/restore-last.json, journalctl -u ject-pg-restore-test."
+        isPaused: false
+  - orgId: 1
+    name: "ject-external"
+    folder: "JECT"
+    interval: "1m"
+    rules:
+      - uid: "ject-probe-fail"
+        title: "공인 주소 접속 실패"
+        condition: "C"
+        data:
+          - refId: "A"
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: "prom"
+            model:
+              refId: "A"
+              expr: "probe_success or on() (0 * absent(probe_success))"
+              instant: true
+              intervalMs: 30000
+              maxDataPoints: 43200
+          - refId: "C"
+            datasourceUid: "__expr__"
+            model:
+              refId: "C"
+              type: "threshold"
+              expression: "A"
+              conditions:
+                - evaluator:
+                    type: "lt"
+                    params:
+                      - 1
+        noDataState: "OK"
+        execErrState: "Alerting"
+        for: "3m"
+        labels:
+          severity: "critical"
+        annotations:
+          summary: "{{ $labels.target }} 공인 주소(/readyz) 접속 실패"
+          description: "개발·모니터링 VM에서 NAT를 거쳐 공인 HTTPS 주소를 1분마다 시험합니다. 운영 Nginx·인증서·앱 readiness(DB·Redis)를 확인하세요. OCI Health Checks는 무료가 아니어서 이 시험으로 대신합니다."
+        isPaused: false
+      - uid: "ject-cert-expiry"
+        title: "인증서 만료 14일 이내"
+        condition: "C"
+        data:
+          - refId: "A"
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: "prom"
+            model:
+              refId: "A"
+              expr: "(probe_ssl_earliest_cert_expiry - time()) / 86400"
+              instant: true
+              intervalMs: 30000
+              maxDataPoints: 43200
+          - refId: "C"
+            datasourceUid: "__expr__"
+            model:
+              refId: "C"
+              type: "threshold"
+              expression: "A"
+              conditions:
+                - evaluator:
+                    type: "lt"
+                    params:
+                      - 14
+        noDataState: "OK"
+        execErrState: "Alerting"
+        for: "0s"
+        labels:
+          severity: "warning"
+        annotations:
+          summary: "{{ $labels.target }} 인증서 만료까지 {{ $values.A.Value }}일"
+          description: "자동 갱신(ject-certbot-renew.timer, 만료 30일 전부터 시도)이 실패하고 있습니다. sudo /opt/ject/bin/ject-cert renew 로그를 확인하세요."
+        isPaused: false
+  - orgId: 1
+    name: "ject-app"
+    folder: "JECT"
+    interval: "1m"
+    rules:
+      - uid: "ject-app-down"
+        title: "앱 지표 끊김"
+        condition: "C"
+        data:
+          - refId: "A"
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: "prom"
+            model:
+              refId: "A"
+              expr: "(label_replace(vector(1), \"host\", \"prod-app\", \"\", \"\") or label_replace(vector(1), \"host\", \"dev\", \"\", \"\")) unless on(host) (last_over_time(up{job=\"app\"}[2m]) == 1)"
+              instant: true
+              intervalMs: 30000
+              maxDataPoints: 43200
+          - refId: "C"
+            datasourceUid: "__expr__"
+            model:
+              refId: "C"
+              type: "threshold"
+              expression: "A"
+              conditions:
+                - evaluator:
+                    type: "gt"
+                    params:
+                      - 0
+        noDataState: "OK"
+        execErrState: "Alerting"
+        for: "3m"
+        labels:
+          severity: "critical"
+        annotations:
+          summary: "{{ $labels.host }} 앱(관리 포트 8081 /actuator/prometheus) 응답 없음"
+          description: "앱 컨테이너가 멈췄거나 재시작 중입니다. sudo /opt/ject/bin/ject-deploy status, docker logs로 확인하세요."
+        isPaused: false
+      - uid: "ject-http-5xx"
+        title: "HTTP 5xx 비율 5% 초과"
+        condition: "C"
+        data:
+          - refId: "A"
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: "prom"
+            model:
+              refId: "A"
+              expr: "(sum by(host) (rate(http_server_requests_seconds_count{status=~\"5..\"}[5m])) / sum by(host) (rate(http_server_requests_seconds_count[5m]))) and on(host) (sum by(host) (increase(http_server_requests_seconds_count[5m])) >= 20)"
+              instant: true
+              intervalMs: 30000
+              maxDataPoints: 43200
+          - refId: "C"
+            datasourceUid: "__expr__"
+            model:
+              refId: "C"
+              type: "threshold"
+              expression: "A"
+              conditions:
+                - evaluator:
+                    type: "gt"
+                    params:
+                      - 0.05
+        noDataState: "OK"
+        execErrState: "Alerting"
+        for: "5m"
+        labels:
+          severity: "critical"
+        annotations:
+          summary: "{{ $labels.host }} 5xx 비율 {{ $values.A.Value }}"
+          description: "최근 배포·앱 오류 로그(Grafana 「JECT 로그」)·DB 상태를 확인하세요."
+        isPaused: false
+      - uid: "ject-latency-p95"
+        title: "응답 p95 1초 초과"
+        condition: "C"
+        data:
+          - refId: "A"
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: "prom"
+            model:
+              refId: "A"
+              expr: "histogram_quantile(0.95, sum by(le, host) (rate(http_server_requests_seconds_bucket{uri!~\"/actuator.*|/readyz|/healthz\"}[5m])))"
+              instant: true
+              intervalMs: 30000
+              maxDataPoints: 43200
+          - refId: "C"
+            datasourceUid: "__expr__"
+            model:
+              refId: "C"
+              type: "threshold"
+              expression: "A"
+              conditions:
+                - evaluator:
+                    type: "gt"
+                    params:
+                      - 1
+        noDataState: "OK"
+        execErrState: "Alerting"
+        for: "5m"
+        labels:
+          severity: "warning"
+        annotations:
+          summary: "{{ $labels.host }} p95 {{ $values.A.Value }}초"
+          description: "CPU·DB·외부 호출을 확인하세요. OCR 같은 장시간 API는 별도 기준이 필요합니다."
+        isPaused: false
+      - uid: "ject-db-pool-pending"
+        title: "DB 커넥션 대기"
+        condition: "C"
+        data:
+          - refId: "A"
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: "prom"
+            model:
+              refId: "A"
+              expr: "max by(host) (hikaricp_connections_pending)"
+              instant: true
+              intervalMs: 30000
+              maxDataPoints: 43200
+          - refId: "C"
+            datasourceUid: "__expr__"
+            model:
+              refId: "C"
+              type: "threshold"
+              expression: "A"
+              conditions:
+                - evaluator:
+                    type: "gt"
+                    params:
+                      - 0
+        noDataState: "OK"
+        execErrState: "Alerting"
+        for: "5m"
+        labels:
+          severity: "warning"
+        annotations:
+          summary: "{{ $labels.host }} DB 커넥션 대기 {{ $values.A.Value }}개(5분 지속)"
+          description: "느린 쿼리·커넥션 누수·풀 크기를 확인하세요(운영 PostgreSQL max_connections 60)."
+        isPaused: false
+      - uid: "ject-error-logs"
+        title: "운영 오류 로그 급증"
+        condition: "C"
+        data:
+          - refId: "A"
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: "loki"
+            model:
+              refId: "A"
+              expr: "sum by(host, service) (count_over_time({env=\"prod\", level=\"error\"}[5m]))"
+              queryType: "instant"
+              intervalMs: 30000
+              maxDataPoints: 43200
+          - refId: "C"
+            datasourceUid: "__expr__"
+            model:
+              refId: "C"
+              type: "threshold"
+              expression: "A"
+              conditions:
+                - evaluator:
+                    type: "gt"
+                    params:
+                      - 10
+        noDataState: "OK"
+        execErrState: "Alerting"
+        for: "0s"
+        labels:
+          severity: "warning"
+        annotations:
+          summary: "{{ $labels.host }} {{ $labels.service }} 오류 로그 5분간 {{ $values.A.Value }}건"
+          description: "Grafana 「JECT 로그」에서 level=error로 원인을 확인하세요."
+        isPaused: false

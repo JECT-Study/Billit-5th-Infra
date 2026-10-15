@@ -1,0 +1,6 @@
+# JECT Prometheus (개발·모니터링 VM). 수집은 각 VM의 Alloy가 하고 remote write로 밀어 넣는다
+# (--web.enable-remote-write-receiver). 그래서 여기에는 직접 수집 대상이 없다.
+# 보존: --storage.tsdb.retention.time=14d, retention.size=8GB(먼저 닿는 쪽 기준) — compose/obs.yaml.
+global:
+  scrape_interval: 30s
+  evaluation_interval: 30s

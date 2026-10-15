@@ -1,0 +1,50 @@
+// 개발·모니터링 VM 전용: 관측 도구 자체 지표 + 공인 주소 접속 시험(OCI Health Checks 대체, 무료).
+// 시험은 이 VM에서 NAT를 거쳐 인터넷 쪽 공인 주소로 나간다(운영 Nginx·인증서·앱 readiness까지 확인).
+// 환경변수: PROBE_PROD_URL, PROBE_DEV_URL (예: https://<운영 도메인>/readyz)
+
+prometheus.scrape "obs" {
+  targets = [
+    {"__address__" = "127.0.0.1:9090", "component" = "prometheus"},
+    {"__address__" = "127.0.0.1:3100", "component" = "loki"},
+    {"__address__" = "127.0.0.1:3000", "component" = "grafana"},
+  ]
+  job_name        = "obs"
+  scrape_interval = "60s"
+  forward_to      = [prometheus.relabel.host.receiver]
+}
+
+prometheus.exporter.blackbox "public" {
+  config = "{ modules: { https_ready: { prober: http, timeout: 10s, http: { valid_status_codes: [200], fail_if_not_ssl: true, no_follow_redirects: true, preferred_ip_protocol: ip4 } } } }"
+  target {
+    name    = "prod"
+    address = sys.env("PROBE_PROD_URL")
+    module  = "https_ready"
+  }
+  target {
+    name    = "dev"
+    address = sys.env("PROBE_DEV_URL")
+    module  = "https_ready"
+  }
+}
+
+discovery.relabel "probe" {
+  targets = prometheus.exporter.blackbox.public.targets
+  // 시험 대상 이름(prod|dev)을 target 라벨로 남긴다.
+  rule {
+    source_labels = ["__param_target"]
+    target_label  = "url"
+  }
+  rule {
+    source_labels = ["job"]
+    regex         = ".*/(.*)"
+    target_label  = "target"
+  }
+}
+
+prometheus.scrape "probe" {
+  targets         = discovery.relabel.probe.output
+  job_name        = "probe"
+  scrape_interval = "60s"
+  scrape_timeout  = "15s"
+  forward_to      = [prometheus.relabel.host.receiver]
+}

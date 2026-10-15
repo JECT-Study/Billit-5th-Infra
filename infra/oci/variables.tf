@@ -42,3 +42,9 @@ variable "create_team_iam" {
   type        = bool
   default     = true
 }
+
+variable "alert_email" {
+  description = "장애·백업 실패 알림을 받을 이메일(OCI Notifications 구독). tfvars(저장소 제외)에 둔다. 구독 확인 메일의 링크를 눌러야 전달된다."
+  type        = string
+  sensitive   = true
+}

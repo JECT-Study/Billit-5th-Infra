@@ -8,3 +8,10 @@ logging:
       console: ecs   # 한 줄 JSON 로그(서버에서 검색·수집하기 쉬움)
   level:
     com.ject: debug
+
+# API 문서: 로컬 http://localhost:8080/swagger-ui.html, 개발 서버 https://<개발 도메인>/swagger-ui.html(Basic 인증)
+springdoc:
+  api-docs:
+    enabled: true
+  swagger-ui:
+    enabled: true

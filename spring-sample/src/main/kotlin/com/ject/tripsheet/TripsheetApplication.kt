@@ -7,5 +7,5 @@ import org.springframework.boot.runApplication
 class TripsheetApplication
 
 fun main(args: Array<String>) {
-	runApplication<TripsheetApplication>(*args)
+    runApplication<TripsheetApplication>(*args)
 }

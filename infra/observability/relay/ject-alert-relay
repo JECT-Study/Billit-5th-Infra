@@ -1,0 +1,156 @@
+#!/usr/bin/env python3
+"""ject-alert-relay: Grafana 알림(webhook) → OCI Notifications 주제(ject-alerts) → 이메일.
+
+개발·모니터링 VM의 systemd 서비스로 127.0.0.1에서만 받는다(Grafana도 호스트 네트워크·루프백).
+OCI 인증은 인스턴스 주체(이 VM의 동적 그룹은 ject-alerts 주제에만 발행 가능, infra/oci/monitoring.tf).
+실행 파이썬은 /opt/ject/oci-cli 가상환경(oci SDK 포함)이다.
+
+환경변수(/etc/ject/alert-relay.env):
+  ALERT_TOPIC_ID   ject-alerts 주제 OCID (필수, DRY_RUN=1이면 없어도 됨)
+  RELAY_LISTEN     기본 127.0.0.1:9095
+  DRY_RUN          1이면 OCI에 보내지 않고 표준출력에만 쓴다(로컬 시험용)
+
+경로:
+  POST /grafana    Grafana webhook 본문(JSON)
+  POST /test       시험 메일 1통(제목·본문 고정) — 알림 수신 확인용
+  GET  /healthz    상태
+"""
+import datetime as dt
+import json
+import os
+import sys
+import threading
+import time
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+TOPIC = os.environ.get("ALERT_TOPIC_ID", "")
+DRY = os.environ.get("DRY_RUN") == "1"
+HOST, PORT = os.environ.get("RELAY_LISTEN", "127.0.0.1:9095").rsplit(":", 1)
+KST = dt.timezone(dt.timedelta(hours=9))
+MAX_BODY = 1 << 20
+
+_client = None
+_lock = threading.Lock()
+
+
+def log(**kw):
+    print(json.dumps(dict(time=dt.datetime.now(KST).isoformat(timespec="seconds"), service="ject-alert-relay", **kw),
+                     ensure_ascii=False), flush=True)
+
+
+def client():
+    global _client
+    with _lock:
+        if _client is None:
+            import oci  # 가상환경에만 있다
+            signer = oci.auth.signers.InstancePrincipalsSecurityTokenSigner()
+            _client = oci.ons.NotificationDataPlaneClient(config={"region": signer.region}, signer=signer)
+        return _client
+
+
+def publish(title, body):
+    title = title[:250]
+    body = body[:60000]
+    if DRY:
+        log(event="dry_run", title=title, body=body)
+        return
+    import oci
+    last = None
+    for attempt in range(3):
+        try:
+            client().publish_message(TOPIC, oci.ons.models.MessageDetails(title=title, body=body))
+            log(event="published", title=title)
+            return
+        except Exception as e:  # 네트워크·토큰 갱신 오류는 잠시 뒤 다시 시도
+            last = e
+            log(event="publish_retry", attempt=attempt + 1, error=type(e).__name__)
+            time.sleep(2 * (attempt + 1))
+    raise last
+
+
+def kst(ts):
+    if not ts or ts.startswith("0001-"):
+        return "-"
+    try:
+        return dt.datetime.fromisoformat(ts.replace("Z", "+00:00")).astimezone(KST).strftime("%Y-%m-%d %H:%M:%S KST")
+    except ValueError:
+        return ts
+
+
+def format_grafana(p):
+    alerts = p.get("alerts") or []
+    firing = [a for a in alerts if a.get("status") == "firing"]
+    resolved = [a for a in alerts if a.get("status") == "resolved"]
+    common = p.get("commonLabels") or {}
+    name = common.get("alertname") or (alerts[0].get("labels", {}).get("alertname") if alerts else "알림")
+    sev = common.get("severity", "")
+    state = "발생" if firing else "해소"
+    hosts = sorted({a.get("labels", {}).get("host", "") for a in alerts} - {""})
+    title = f"[JECT][{state}]{'[' + sev + ']' if sev else ''} {name}" + (f" ({', '.join(hosts)})" if hosts else "")
+    lines = [f"상태: {state} — 발생 {len(firing)}건, 해소 {len(resolved)}건", ""]
+    for a in firing + resolved:
+        lab = a.get("labels", {})
+        ann = a.get("annotations", {})
+        lines.append(f"■ {'발생' if a.get('status') == 'firing' else '해소'}: {ann.get('summary') or lab.get('alertname', '')}")
+        if ann.get("description"):
+            lines.append(f"  {ann['description']}")
+        keep = {k: v for k, v in lab.items() if k not in ("alertname", "grafana_folder", "__alert_rule_uid__")}
+        if keep:
+            lines.append("  라벨: " + ", ".join(f"{k}={v}" for k, v in sorted(keep.items())))
+        lines.append(f"  시작: {kst(a.get('startsAt'))}" + (f" / 해소: {kst(a.get('endsAt'))}" if a.get("status") == "resolved" else ""))
+        lines.append("")
+    lines.append("Grafana(관리자 터널): http://127.0.0.1:3000 — 접속 방법은 infra/README.md 「모니터링」")
+    return title, "\n".join(lines)
+
+
+class H(BaseHTTPRequestHandler):
+    server_version = "ject-alert-relay"
+
+    def log_message(self, *a):  # 기본 접근 로그 끔(JSON 로그만)
+        pass
+
+    def _send(self, code, text):
+        b = (text + "\n").encode()
+        self.send_response(code)
+        self.send_header("Content-Type", "text/plain; charset=utf-8")
+        self.send_header("Content-Length", str(len(b)))
+        self.end_headers()
+        self.wfile.write(b)
+
+    def do_GET(self):
+        if self.path == "/healthz":
+            return self._send(200, "ok")
+        self._send(404, "not found")
+
+    def do_POST(self):
+        n = int(self.headers.get("Content-Length") or 0)
+        if n > MAX_BODY:
+            return self._send(413, "too large")
+        raw = self.rfile.read(n)
+        try:
+            if self.path == "/grafana":
+                title, body = format_grafana(json.loads(raw or b"{}"))
+            elif self.path == "/test":
+                title = "[JECT][시험] 알림 수신 확인"
+                body = ("JECT 알림 경로 시험 메일입니다(Grafana → ject-alert-relay → OCI Notifications → 이메일).\n"
+                        f"보낸 시각: {dt.datetime.now(KST).strftime('%Y-%m-%d %H:%M:%S KST')}")
+            else:
+                return self._send(404, "not found")
+            publish(title, body)
+            self._send(200, "sent")
+        except Exception as e:
+            log(event="error", path=self.path, error=f"{type(e).__name__}: {str(e)[:300]}")
+            self._send(502, "publish failed")
+
+
+def main():
+    if not TOPIC and not DRY:
+        print("ALERT_TOPIC_ID 없음", file=sys.stderr)
+        sys.exit(2)
+    srv = ThreadingHTTPServer((HOST, int(PORT)), H)
+    log(event="listening", addr=f"{HOST}:{PORT}", dry_run=DRY)
+    srv.serve_forever()
+
+
+if __name__ == "__main__":
+    main()

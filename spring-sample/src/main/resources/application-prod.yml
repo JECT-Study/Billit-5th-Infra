@@ -1,5 +1,5 @@
 # 운영 서버(APP_ENV=prod). 접속 정보는 개발과 같은 이름의 환경변수로 서버가 넣는다(운영 DB ject, 데이터 VM).
-# 운영에서는 디버그 로그·SQL 출력·API 문서 화면을 켜지 않는다.
+# 운영에서는 디버그 로그·SQL 출력·API 문서 화면을 켜지 않는다(springdoc은 application.yml 기본값 false).
 logging:
   structured:
     format:

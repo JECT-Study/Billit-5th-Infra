@@ -168,11 +168,17 @@ locals {
 
   # 인바운드 허용 규칙. 여기에 없는 포트는 모두 차단된다.
   ingress_rules = {
-    app_http      = { nsg = "prod_app", port = 80, src = "0.0.0.0/0", src_type = "CIDR_BLOCK", desc = "HTTP: HTTPS 리다이렉트, ACME" }
-    app_https     = { nsg = "prod_app", port = 443, src = "0.0.0.0/0", src_type = "CIDR_BLOCK", desc = "HTTPS" }
-    data_pg       = { nsg = "prod_data", port = 5432, src = "prod_app", src_type = "NSG", desc = "운영 PostgreSQL: 운영 앱 VM만" }
-    data_redis    = { nsg = "prod_data", port = 6379, src = "prod_app", src_type = "NSG", desc = "운영 Redis: 운영 앱 VM만" }
-    dev_gateway   = { nsg = "dev", port = 8080, src = "prod_app", src_type = "NSG", desc = "개발 게이트웨이: 운영 Nginx만" }
+    app_http    = { nsg = "prod_app", port = 80, src = "0.0.0.0/0", src_type = "CIDR_BLOCK", desc = "HTTP: HTTPS 리다이렉트, ACME" }
+    app_https   = { nsg = "prod_app", port = 443, src = "0.0.0.0/0", src_type = "CIDR_BLOCK", desc = "HTTPS" }
+    data_pg     = { nsg = "prod_data", port = 5432, src = "prod_app", src_type = "NSG", desc = "운영 PostgreSQL: 운영 앱 VM만" }
+    data_redis  = { nsg = "prod_data", port = 6379, src = "prod_app", src_type = "NSG", desc = "운영 Redis: 운영 앱 VM만" }
+    dev_gateway = { nsg = "dev", port = 8080, src = "prod_app", src_type = "NSG", desc = "개발 게이트웨이: 운영 Nginx만" }
+    # 관측: 운영 VM의 Alloy가 개발·모니터링 VM으로 메트릭·로그를 보낸다(쓰기 전용 경로 + Basic 인증, obs-gateway).
+    # 운영 VM 쪽에는 새 인바운드 포트가 없다(수집은 각 VM의 Alloy가 로컬에서 하고 밀어 넣는다).
+    obs_prom_app  = { nsg = "dev", port = 9090, src = "prod_app", src_type = "NSG", desc = "메트릭 쓰기(remote write): 운영 앱 VM Alloy" }
+    obs_prom_data = { nsg = "dev", port = 9090, src = "prod_data", src_type = "NSG", desc = "메트릭 쓰기(remote write): 운영 데이터 VM Alloy" }
+    obs_loki_app  = { nsg = "dev", port = 3100, src = "prod_app", src_type = "NSG", desc = "로그 쓰기(Loki push): 운영 앱 VM Alloy" }
+    obs_loki_data = { nsg = "dev", port = 3100, src = "prod_data", src_type = "NSG", desc = "로그 쓰기(Loki push): 운영 데이터 VM Alloy" }
     app_ssh_bast  = { nsg = "prod_app", port = 22, src = "bastion", src_type = "CIDR_BLOCK", desc = "SSH: OCI Bastion 엔드포인트만" }
     data_ssh_bast = { nsg = "prod_data", port = 22, src = "bastion", src_type = "CIDR_BLOCK", desc = "SSH: OCI Bastion 엔드포인트만" }
     dev_ssh_bast  = { nsg = "dev", port = 22, src = "bastion", src_type = "CIDR_BLOCK", desc = "SSH: OCI Bastion 엔드포인트만" }

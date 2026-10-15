@@ -1,0 +1,18 @@
+# Grafana(호스트 네트워크, 127.0.0.1:3000)는 같은 VM의 Prometheus·Loki를 루프백으로 읽는다.
+apiVersion: 1
+datasources:
+  - name: Prometheus
+    uid: prom
+    type: prometheus
+    access: proxy
+    url: http://127.0.0.1:9090
+    isDefault: true
+    editable: false
+    jsonData:
+      timeInterval: 30s
+  - name: Loki
+    uid: loki
+    type: loki
+    access: proxy
+    url: http://127.0.0.1:3100
+    editable: false

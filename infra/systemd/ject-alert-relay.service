@@ -1,0 +1,23 @@
+[Unit]
+Description=JECT 알림 중계 (Grafana webhook → OCI Notifications ject-alerts)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+EnvironmentFile=/etc/ject/alert-relay.env
+ExecStart=/opt/ject/oci-cli/bin/python3 /opt/ject/bin/ject-alert-relay
+DynamicUser=yes
+Restart=always
+RestartSec=5
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+MemoryMax=192M
+
+[Install]
+WantedBy=multi-user.target

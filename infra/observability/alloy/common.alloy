@@ -1,0 +1,198 @@
+// JECT Alloy 공통 설정(3대 모두). 이 VM의 지표·로그를 로컬에서 모아 개발·모니터링 VM으로 밀어 넣는다.
+// 환경변수(/etc/ject/obs.env → compose/agent.yaml):
+//   JECT_HOST(prod-app|prod-data|dev), JECT_ENV(prod|dev), OBS_PROM_URL, OBS_LOKI_URL, OBS_PUSH_USER
+// 비밀번호: /run/secrets/obs_push_password (개발 VM의 obs-gateway Basic 인증)
+// 라벨은 값 종류가 적은 것만 쓴다(host, env, project, service, container, level, unit). 사용자·여행·요청 ID는 라벨로 만들지 않는다.
+
+logging {
+  level  = "warn"
+  format = "logfmt"
+}
+
+// ---- 지표 ------------------------------------------------------------------
+
+prometheus.scrape "node" {
+  targets         = [{"__address__" = "127.0.0.1:9100"}]
+  job_name        = "node"
+  scrape_interval = "30s"
+  forward_to      = [prometheus.relabel.host.receiver]
+}
+
+prometheus.exporter.self "alloy" { }
+
+prometheus.scrape "alloy" {
+  targets         = prometheus.exporter.self.alloy.targets
+  job_name        = "alloy"
+  scrape_interval = "60s"
+  forward_to      = [prometheus.relabel.host.receiver]
+}
+
+prometheus.relabel "host" {
+  rule {
+    target_label = "host"
+    replacement  = sys.env("JECT_HOST")
+  }
+  rule {
+    target_label = "env"
+    replacement  = sys.env("JECT_ENV")
+  }
+  rule {
+    target_label = "instance"
+    replacement  = sys.env("JECT_HOST")
+  }
+  forward_to = [prometheus.remote_write.obs.receiver]
+}
+
+prometheus.remote_write "obs" {
+  endpoint {
+    url = sys.env("OBS_PROM_URL")
+    basic_auth {
+      username      = sys.env("OBS_PUSH_USER")
+      password_file = "/run/secrets/obs_push_password"
+    }
+  }
+}
+
+// ---- 로그 ------------------------------------------------------------------
+// JECT VM에는 JECT 컨테이너만 돈다. Compose로 띄운 컨테이너(ject-* 프로젝트)의 stdout/stderr를 모은다.
+
+discovery.docker "compose" {
+  host             = "unix:///var/run/docker.sock"
+  refresh_interval = "30s"
+  filter {
+    name   = "label"
+    values = ["com.docker.compose.project"]
+  }
+}
+
+discovery.relabel "compose" {
+  targets = []
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_project"]
+    regex         = "ject-.*"
+    action        = "keep"
+  }
+  // 수집기 자신의 로그는 다시 수집하지 않는다(되먹임 방지).
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+    regex         = "alloy"
+    action        = "drop"
+  }
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_project"]
+    target_label  = "project"
+  }
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+    target_label  = "service"
+  }
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(.*)"
+    target_label  = "container"
+  }
+}
+
+loki.source.docker "compose" {
+  host             = "unix:///var/run/docker.sock"
+  targets          = discovery.docker.compose.targets
+  relabel_rules    = discovery.relabel.compose.rules
+  labels           = {"job" = "docker"}
+  refresh_interval = "30s"
+  forward_to       = [loki.relabel.require_job.receiver]
+}
+
+// systemd의 JECT 작업(백업·복원 시험·인증서 갱신·알림 중계) 로그
+loki.relabel "journal" {
+  forward_to = []
+  rule {
+    source_labels = ["__journal__systemd_unit"]
+    target_label  = "unit"
+  }
+}
+
+loki.source.journal "ject" {
+  path          = "/var/log/journal"
+  max_age       = "12h"
+  matches       = "_SYSTEMD_UNIT=ject-pg-backup.service _SYSTEMD_UNIT=ject-pg-restore-test.service _SYSTEMD_UNIT=ject-certbot-renew.service _SYSTEMD_UNIT=ject-alert-relay.service _SYSTEMD_UNIT=ject-backup-metrics.service"
+  relabel_rules = loki.relabel.journal.rules
+  labels        = {"job" = "systemd"}
+  forward_to    = [loki.relabel.require_job.receiver]
+}
+
+// 위 drop 규칙은 대상의 라벨만 비우고 수집은 계속한다(실측: 라벨 없는 Alloy 로그가 들어옴) → 라벨(job) 없는 줄은 여기서 버린다.
+loki.relabel "require_job" {
+  rule {
+    source_labels = ["job"]
+    regex         = ""
+    action        = "drop"
+  }
+  forward_to = [loki.process.mask.receiver]
+}
+
+// ---- 민감정보 제외(수집 단계의 2차 방어) -------------------------------------
+// 1차는 앱이 애초에 남기지 않는 것이다(docs/개발-시작-가이드.md 「로그 규칙」). 여기서는 새어 나온 값을 가린다.
+// stage.replace는 캡처 그룹 부분만 replace 값으로 바꾼다. 패턴은 infra/tests/alloy-mask-test.sh로 시험한다.
+loki.process "mask" {
+  // 영수증 원문·OCR 결과가 실린 줄은 통째로 버린다.
+  stage.drop {
+    expression          = "(?i)(analyzeResult|receipt_raw|raw_receipt|ocr_raw|ocr_text)"
+    drop_counter_reason = "receipt_raw"
+  }
+  stage.replace {
+    expression = "(?i)\\bbearer\\s+([A-Za-z0-9._~+/=-]+)"
+    replace    = "[REDACTED]"
+  }
+  stage.replace {
+    expression = "(?i)\\bbasic\\s+([A-Za-z0-9+/=]{8,})"
+    replace    = "[REDACTED]"
+  }
+  stage.replace {
+    expression = "(eyJ[A-Za-z0-9_-]{8,}\\.[A-Za-z0-9_-]{8,}\\.[A-Za-z0-9_-]{8,})"
+    replace    = "[REDACTED_JWT]"
+  }
+  stage.replace {
+    expression = "(?i)(?:password|passwd|pwd|secret|token|access_token|refresh_token|api_key|apikey|authorization|cookie)\\\\?\"?\\s*[:=]\\s*\\\\?\"?([^\"\\\\\\s,&}]+)"
+    replace    = "[REDACTED]"
+  }
+  stage.replace {
+    expression = "([A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,})"
+    replace    = "[REDACTED_EMAIL]"
+  }
+  stage.replace {
+    expression = "\\b(01[016789][-. ]?[0-9]{3,4}[-. ]?[0-9]{4})\\b"
+    replace    = "[REDACTED_PHONE]"
+  }
+  stage.replace {
+    expression = "\\b([0-9]{4}[- ][0-9]{4}[- ][0-9]{4}[- ][0-9]{1,4})\\b"
+    replace    = "[REDACTED_CARD]"
+  }
+  // 로그 수준 라벨: Spring ECS("log.level"), Go slog("level")
+  stage.regex {
+    expression = "\"(?:log\\.level|level)\"\\s*:\\s*\"(?P<level>[A-Za-z]+)\""
+  }
+  stage.template {
+    source   = "level"
+    template = "{{ ToLower .Value }}"
+  }
+  stage.labels {
+    values = {"level" = ""}
+  }
+  stage.static_labels {
+    values = {
+      "host" = sys.env("JECT_HOST"),
+      "env"  = sys.env("JECT_ENV"),
+    }
+  }
+  forward_to = [loki.write.obs.receiver]
+}
+
+loki.write "obs" {
+  endpoint {
+    url = sys.env("OBS_LOKI_URL")
+    basic_auth {
+      username      = sys.env("OBS_PUSH_USER")
+      password_file = "/run/secrets/obs_push_password"
+    }
+  }
+}

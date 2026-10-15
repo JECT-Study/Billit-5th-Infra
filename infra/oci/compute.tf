@@ -41,7 +41,11 @@ resource "oci_core_instance" "vm" {
   agent_config {
     are_all_plugins_disabled = false
     is_management_disabled   = false
-    is_monitoring_disabled   = true # 이번 범위에서 OCI Monitoring 수집은 쓰지 않는다
+    is_monitoring_disabled   = false # OCI Monitoring(oci_computeagent 지표) → monitoring.tf의 VM 응답 없음·메모리 알람
+    plugins_config {
+      name          = "Compute Instance Monitoring"
+      desired_state = "ENABLED"
+    }
     # A1 + Ubuntu에서는 Bastion 플러그인(관리형 SSH 세션)이 지원되지 않는다. 포트 포워딩 세션만 쓴다.
     plugins_config {
       name          = "Bastion"

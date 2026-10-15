@@ -1,0 +1,10 @@
+// 앱 지표(운영 앱 VM, 개발 VM): 앱 컨테이너의 관리 포트 8081을 호스트 127.0.0.1:18081로만 내보낸다(compose).
+// Spring Boot: Actuator + Micrometer Prometheus Registry(/actuator/prometheus). 스모크 앱도 같은 경로를 준다.
+prometheus.scrape "app" {
+  targets         = [{"__address__" = "127.0.0.1:18081"}]
+  job_name        = "app"
+  metrics_path    = "/actuator/prometheus"
+  scrape_interval = "30s"
+  scrape_timeout  = "10s"
+  forward_to      = [prometheus.relabel.host.receiver]
+}

@@ -1,0 +1,60 @@
+# JECT 수집기(3대 모두): Node Exporter + Grafana Alloy. 앱·DB와 다른 Compose 프로젝트라 배포와 무관하게 돈다.
+# 실행: docker compose -p ject-agent -f /opt/ject/compose/agent.yaml --env-file /etc/ject/obs.env up -d
+# 둘 다 호스트 네트워크·루프백에서만 듣는다(OCI 기본 iptables가 22번 외 외부 입력을 막고, 열 필요도 없다).
+# 지표·로그는 Alloy가 개발·모니터링 VM의 obs-gateway(쓰기 전용, Basic 인증)로 밀어 넣는다.
+name: ject-agent
+
+x-logging: &logging
+  driver: json-file
+  options: { max-size: "10m", max-file: "3" }
+
+services:
+  node-exporter:
+    image: prom/node-exporter:v1.12.1
+    restart: unless-stopped
+    network_mode: host
+    pid: host
+    mem_limit: 64m
+    cpus: 0.20
+    command:
+      - --path.rootfs=/host
+      - --web.listen-address=127.0.0.1:9100
+      - --collector.textfile.directory=/host/var/lib/ject/textfile
+      - --collector.filesystem.mount-points-exclude=^/(dev|proc|run/credentials/.+|sys|var/lib/docker/.+|var/lib/containers/storage/.+|snap/.+)($|/)
+    volumes:
+      - /:/host:ro,rslave
+    logging: *logging
+
+  alloy:
+    image: grafana/alloy:v1.20.1
+    restart: unless-stopped
+    network_mode: host
+    mem_limit: 256m
+    cpus: 0.30
+    command:
+      - run
+      - --server.http.listen-addr=127.0.0.1:12345
+      - --storage.path=/var/lib/alloy/data
+      - --disable-reporting
+      - /etc/alloy
+    environment:
+      JECT_HOST: ${JECT_HOST:?}
+      JECT_ENV: ${JECT_ENV:?}
+      OBS_PROM_URL: ${OBS_PROM_URL:?}
+      OBS_LOKI_URL: ${OBS_LOKI_URL:?}
+      OBS_PUSH_USER: ${OBS_PUSH_USER:-ject-agent}
+      PROBE_PROD_URL: ${PROBE_PROD_URL:-}
+      PROBE_DEV_URL: ${PROBE_DEV_URL:-}
+    secrets: [obs_push_password]
+    volumes:
+      - /etc/ject/alloy:/etc/alloy:ro
+      - /srv/ject/observability/alloy:/var/lib/alloy/data
+      # 로그 수집: Docker API(읽기 전용 마운트여도 API 권한은 그대로다 — 신뢰한 수집기에만 준다. 앱 컨테이너에는 주지 않는다)
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/log/journal:/var/log/journal:ro
+      - /etc/machine-id:/etc/machine-id:ro
+    logging: *logging
+
+secrets:
+  obs_push_password:
+    file: /srv/ject/secrets/obs_push_password

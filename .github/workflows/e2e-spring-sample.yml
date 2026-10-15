@@ -1,6 +1,7 @@
 # 검증 전용(이 저장소에만 둔다): templates/backend(Spring Boot 4 템플릿)를 적용한 샘플을
 # x86 러너에서 ARM64 이미지로 빌드(빌드 단계는 $BUILDPLATFORM)해 개발 VM에 배포한다.
-# 확인하는 것: Compose secret(redis_password) 읽기, dev 프로필, Flyway, /readyz(DB·Redis), HEALTHCHECK.
+# 확인하는 것: CI 검사(spotlessCheck·test·build), Compose secret(redis_password) 읽기, dev 프로필, Flyway, /readyz(DB·Redis), HEALTHCHECK,
+#   관리 포트 지표 수집(Alloy → Prometheus), 개발 Swagger(Basic 인증).
 # 끝나면 개발 VM은 스모크 이미지로 되돌리고 샘플이 만든 테이블은 지운다(실제 앱의 Flyway 이력과 섞이지 않게).
 name: e2e-spring-sample
 
@@ -11,7 +12,14 @@ permissions:
   contents: read
 
 jobs:
+  # CI 검사 단계(앱 저장소 ci-cd.yml의 check와 같은 재사용 워크플로)
+  check:
+    uses: ./.github/workflows/gradle-check.yml
+    with:
+      working_directory: spring-sample
+
   build:
+    needs: check
     permissions: { contents: read, packages: write }
     uses: ./.github/workflows/build-arm64.yml
     with:

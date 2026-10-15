@@ -18,15 +18,37 @@ proxy_common='
         proxy_set_header Connection $connection_upgrade;
         proxy_read_timeout 60s;'
 
-# 관리·관측 엔드포인트는 공개 경로로 연결하지 않는다.
+# 관리·관측 엔드포인트는 공개 경로로 연결하지 않는다. API 문서(Swagger)는 운영에서 항상 막는다.
 deny_internal='
     if ($request_uri ~ ";") { return 400; }
     location ~* ^/(actuator|metrics|prometheus|swagger-ui|v3/api-docs) { return 404; }'
 
-app_locations() {   # $1 = be upstream, $2 = fe upstream(비우면 be가 전부 처리)
-  local be="$1" fe="${2:-}"
+# 개발 게이트웨이: API 문서(springdoc /swagger-ui, /v3/api-docs)만 Basic 인증으로 연다(팀 명세 "Swagger 임시 사용").
+# 해시 파일이 없으면 운영과 같이 막는다. 비밀번호: setup-secrets.sh dev-swagger (사용자 ject)
+dev_internal() {   # $1 = be upstream
+  echo '
+    if ($request_uri ~ ";") { return 400; }
+    location ~* ^/(actuator|metrics|prometheus) { return 404; }'
+  if [ -s /srv/ject/dev/nginx/conf.d/swagger.htpasswd ]; then
+    cat <<EOF
+    location ~* ^/(swagger-ui|v3/api-docs) {
+        auth_basic "JECT dev API docs";
+        auth_basic_user_file /etc/nginx/conf.d/swagger.htpasswd;
+        set \$be_up $1;
+        proxy_pass http://\$be_up;$proxy_common
+        proxy_set_header Authorization "";
+    }
+EOF
+  else
+    echo '    location ~* ^/(swagger-ui|v3/api-docs) { return 404; }'
+  fi
+}
+
+app_locations() {   # $1 = be upstream, $2 = fe upstream(비우면 be가 전부 처리), $3 = dev면 개발 게이트웨이 규칙
+  local be="$1" fe="${2:-}" internal="$deny_internal"
+  [ "${3:-}" = dev ] && internal="$(dev_internal "$be")"
   cat <<EOF
-$deny_internal
+$internal
     location = /readyz {
         set \$be_up $be;
         proxy_pass http://\$be_up/readyz;$proxy_common
@@ -152,7 +174,7 @@ server {
     server_name _;
 $common_headers
     location = /nginx-health { access_log off; return 200 "ok\n"; }
-$(app_locations "be:8080" "${DEV_FE_UPSTREAM:-}")
+$(app_locations "be:8080" "${DEV_FE_UPSTREAM:-}" dev)
 }
 EOF
   } > "$OUT/conf.d/dev.conf.new"

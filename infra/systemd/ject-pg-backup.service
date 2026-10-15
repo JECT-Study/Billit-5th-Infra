@@ -5,6 +5,8 @@ Wants=network-online.target
 Requires=docker.service
 
 [Service]
+# 성공·실패와 관계없이 결과를 지표 파일로 남긴다(Grafana 「백업 실패」 알림).
+ExecStopPost=/opt/ject/bin/ject-backup-metrics
 Type=oneshot
 ExecStart=/opt/ject/bin/ject-pg-backup
 Nice=10
