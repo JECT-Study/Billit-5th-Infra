@@ -1,15 +1,18 @@
-# 재사용 워크플로: OCI Bastion 관리형 SSH 세션으로 JECT VM에 접속해 ject-deploy를 실행한다.
-# - 실행마다 임시 SSH 키, 세션 TTL 30분, 끝나면 세션 삭제(장기 SSH 키 없음). SSH 22는 인터넷에 열지 않는다.
+# 재사용 워크플로: OCI Bastion 포트 포워딩 세션으로 JECT VM의 22번에 터널을 열고, deploy 계정으로 ject-deploy를 실행한다.
+# - A1(ARM) + Ubuntu는 Bastion 관리형 SSH 세션을 지원하지 않아 포트 포워딩 세션을 쓴다(OCI Bastion 알려진 문제).
+# - Bastion 인증은 실행마다 만드는 임시 키, VM 로그인은 환경별 배포 키(JECT_DEPLOY_SSH_KEY).
+#   VM의 deploy 계정은 그 키를 Bastion IP에서만 받고, 강제 명령 ject-deploy-gate만 실행한다(셸·포워딩 없음).
+# - 세션 TTL 30분, 끝나면 세션 삭제. SSH 22는 인터넷에 열지 않는다.
 # - OCI 자격증명은 GitHub Environment(development / production)별 비밀값이다. 환경마다 다른 OCI CI 사용자이며,
-#   각 사용자는 IAM으로 자기 VM·deploy 계정 세션만 만들 수 있다(infra/oci/storage_iam.tf).
+#   각 사용자는 IAM으로 자기 VM 대상 세션만 만들 수 있다(infra/oci/storage_iam.tf).
 # - 운영 배포는 같은 digest가 개발에 성공 배포됐다는 커밋 상태(ject/dev-verified)가 있어야 진행한다.
 # - GHCR pull은 이 작업의 GITHUB_TOKEN(packages:read)으로 배포 순간에만 로그인한다.
 # 입력값은 run 스크립트에 직접 넣지 않고 env로만 전달한다(스크립트 주입 방지).
 #
 # Environment 설정 (development, production 각각):
-#   secrets: OCI_CLI_USER, OCI_CLI_TENANCY, OCI_CLI_FINGERPRINT, OCI_CLI_KEY_CONTENT
+#   secrets: OCI_CLI_USER, OCI_CLI_TENANCY, OCI_CLI_FINGERPRINT, OCI_CLI_KEY_CONTENT, JECT_DEPLOY_SSH_KEY
 #   vars:    OCI_CLI_REGION, JECT_BASTION_ID, JECT_INSTANCE_ID, JECT_PRIVATE_IP, JECT_HOST_KEY, JECT_IMAGE_PREFIX
-#   production은 Required reviewers와 배포 브랜치 제한을 둔다.
+#   production은 배포 브랜치를 main으로 제한하고, 가능하면 Required reviewers를 둔다.
 name: deploy-via-bastion
 
 on:
@@ -81,11 +84,11 @@ jobs:
           TARGET_IP: ${{ vars.JECT_PRIVATE_IP }}
         run: |
           set -euo pipefail
-          ssh-keygen -q -t ed25519 -N '' -f "$RUNNER_TEMP/k" -C "gha-${GITHUB_RUN_ID}"
-          sid=$(oci bastion session create-managed-ssh \
+          ssh-keygen -q -t ed25519 -N '' -f "$RUNNER_TEMP/bk" -C "gha-${GITHUB_RUN_ID}-bastion"
+          sid=$(oci bastion session create-port-forwarding \
             --bastion-id "$BASTION_ID" --target-resource-id "$INSTANCE_ID" \
-            --target-os-username deploy --target-private-ip "$TARGET_IP" \
-            --ssh-public-key-file "$RUNNER_TEMP/k.pub" --session-ttl 1800 \
+            --target-private-ip "$TARGET_IP" --target-port 22 \
+            --ssh-public-key-file "$RUNNER_TEMP/bk.pub" --session-ttl 1800 \
             --display-name "gha-${GITHUB_RUN_ID}-${ENVN}" --query 'data.id' --raw-output)
           echo "id=$sid" >> "$GITHUB_OUTPUT"
           for _ in $(seq 1 60); do
@@ -102,20 +105,32 @@ jobs:
           TARGET_IP: ${{ vars.JECT_PRIVATE_IP }}
           TARGET_HOST_KEY: ${{ vars.JECT_HOST_KEY }}
           REGION: ${{ vars.OCI_CLI_REGION }}
+          DEPLOY_KEY: ${{ secrets.JECT_DEPLOY_SSH_KEY }}
           GHCR_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+          umask 077
+          printf '%s\n' "$DEPLOY_KEY" > "$RUNNER_TEMP/dk"
           printf '%s %s\n' "$TARGET_IP" "$TARGET_HOST_KEY" > "$RUNNER_TEMP/known_hosts"
-          PROXY="ssh -i $RUNNER_TEMP/k -W %h:%p -p 22 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=$RUNNER_TEMP/bastion_known_hosts ${SID}@host.bastion.${REGION}.oci.oraclecloud.com"
+          PROXY="ssh -i $RUNNER_TEMP/bk -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=$RUNNER_TEMP/bastion_known_hosts -W %h:%p -p 22 ${SID}@host.bastion.${REGION}.oci.oraclecloud.com"
           ACTOR="gha-${GITHUB_RUN_ID}"
           if [ "$ACTION" = deploy ]; then
-            REMOTE=(sudo /opt/ject/bin/ject-deploy deploy "$ENVN" "$SVC" "$IMAGE" "$ACTOR" "$GITHUB_ACTOR")
+            REMOTE="ject-deploy deploy $ENVN $SVC $IMAGE $ACTOR $GITHUB_ACTOR"
           else
-            REMOTE=(sudo /opt/ject/bin/ject-deploy rollback "$ENVN" "$SVC" "$ACTOR")
+            REMOTE="ject-deploy rollback $ENVN $SVC $ACTOR"
           fi
-          printf '%s' "$GHCR_TOKEN" | ssh -i "$RUNNER_TEMP/k" \
-            -o UserKnownHostsFile="$RUNNER_TEMP/known_hosts" -o StrictHostKeyChecking=yes \
-            -o ProxyCommand="$PROXY" "deploy@${TARGET_IP}" "${REMOTE[*]}"
+          # 세션이 ACTIVE가 된 직후에는 터널이 잠시 실패할 수 있다. ssh 자체 오류(255)일 때만 다시 시도한다
+          # (원격 명령은 실행되지 않았으므로 안전). 원격 배포 실패(1·2)는 그대로 실패 처리한다.
+          for attempt in 1 2 3 4 5; do
+            rc=0
+            printf '%s' "$GHCR_TOKEN" | ssh -i "$RUNNER_TEMP/dk" -o IdentitiesOnly=yes -o ConnectTimeout=20 \
+              -o UserKnownHostsFile="$RUNNER_TEMP/known_hosts" -o StrictHostKeyChecking=yes \
+              -o ProxyCommand="$PROXY" "deploy@${TARGET_IP}" "$REMOTE" || rc=$?
+            [ "$rc" -eq 255 ] || break
+            echo "ssh 연결 실패(시도 $attempt), 10초 뒤 재시도"; sleep 10
+          done
+          rm -f "$RUNNER_TEMP/dk"
+          exit "$rc"
 
       - name: Mark digest as verified in dev
         if: inputs.environment == 'dev' && inputs.action == 'deploy'

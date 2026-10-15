@@ -17,7 +17,7 @@ install -m 0644 "$SRC/nginx/nginx.conf" /opt/ject/nginx/nginx.conf
 
 case "$ROLE" in
 prod-app)
-  install -m 0755 "$SRC/scripts/ject-deploy" /opt/ject/bin/ject-deploy
+  install -m 0755 "$SRC/scripts/ject-deploy" "$SRC/scripts/ject-deploy-gate" "$SRC/scripts/ject-deploy-key" /opt/ject/bin/
   install -m 0755 "$SRC/scripts/ject-cert" /opt/ject/bin/ject-cert
   install -m 0644 "$SRC/compose/prod-edge.yaml" "$SRC/compose/prod-app.yaml" /opt/ject/compose/
   install -m 0644 "$SRC/systemd/ject-certbot-renew.service" "$SRC/systemd/ject-certbot-renew.timer" /etc/systemd/system/
@@ -39,7 +39,7 @@ prod-data)
   systemctl daemon-reload
   systemctl enable --now ject-pg-backup.timer ject-pg-restore-test.timer >/dev/null ;;
 dev)
-  install -m 0755 "$SRC/scripts/ject-deploy" /opt/ject/bin/ject-deploy
+  install -m 0755 "$SRC/scripts/ject-deploy" "$SRC/scripts/ject-deploy-gate" "$SRC/scripts/ject-deploy-key" /opt/ject/bin/
   install -m 0644 "$SRC/compose/dev-data.yaml" "$SRC/compose/dev-app.yaml" "$SRC/compose/dev-gateway.yaml" /opt/ject/compose/
   install -m 0755 "$SRC/compose/initdb/10-app-role.sh" /opt/ject/compose/initdb/
   docker network inspect ject-dev-net >/dev/null 2>&1 || docker network create ject-dev-net >/dev/null

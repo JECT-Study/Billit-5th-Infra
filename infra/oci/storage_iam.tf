@@ -74,18 +74,22 @@ resource "oci_identity_policy" "developers" {
     "Allow group ${oci_identity_group.developers[0].name} to read instance-family in compartment JECT",
     "Allow group ${oci_identity_group.developers[0].name} to read instance-agent-plugins in compartment JECT",
     "Allow group ${oci_identity_group.developers[0].name} to read virtual-network-family in compartment JECT",
+    "Allow group ${oci_identity_group.developers[0].name} to read vnic-attachments in compartment JECT",
     "Allow group ${oci_identity_group.developers[0].name} to read volume-family in compartment JECT",
     "Allow group ${oci_identity_group.developers[0].name} to read buckets in compartment JECT",
     "Allow group ${oci_identity_group.developers[0].name} to inspect work-requests in compartment JECT",
     "Allow group ${oci_identity_group.developers[0].name} to use bastion in compartment JECT",
-    # 개발자는 deploy(CI 전용) 계정으로 세션을 만들 수 없다.
-    "Allow group ${oci_identity_group.developers[0].name} to manage bastion-session in compartment JECT where target.bastion-session.username != 'deploy'",
+    # A1 + Ubuntu는 관리형 SSH 세션을 지원하지 않아(OCI Bastion 알려진 문제) 포트 포워딩 세션을 쓴다.
+    # 포트 포워딩 세션에는 OS 사용자 이름이 없으므로 username 조건을 걸 수 없다. 대신 NSG가 Bastion에서
+    # VM의 22번만 허용하고, deploy 계정은 CI 전용 키(환경별)만 받으므로 개발자는 deploy로 로그인할 수 없다.
+    "Allow group ${oci_identity_group.developers[0].name} to manage bastion-session in compartment JECT",
   ]
   freeform_tags = local.tags
 }
 
 # ---- CI 배포 주체: 환경별로 분리 -------------------------------------------------
-# 각 그룹은 자기 환경 VM에 deploy 계정 세션만 만들 수 있다. 사용자·API 키는 저장소가 정해진 뒤
+# 각 그룹은 자기 환경 VM을 대상으로 한 포트 포워딩 세션만 만들 수 있다(target.resource.ocid).
+# 서버 쪽에서도 환경별 deploy 키만 받으므로, 다른 VM으로 터널을 열어도 로그인할 수 없다. 사용자·API 키는 저장소가 정해진 뒤
 # 만들고(infra/access/ci-oci-user.md), 키는 GitHub Environment 비밀값으로만 둔다.
 locals {
   ci_targets = {
@@ -109,8 +113,11 @@ resource "oci_identity_policy" "ci" {
   description    = "JECT CI(${each.key}) 최소 권한"
   statements = [
     "Allow group ${oci_identity_group.ci[each.key].name} to use bastion in compartment JECT where target.bastion.name = 'jectbastion'",
-    "Allow group ${oci_identity_group.ci[each.key].name} to manage bastion-session in compartment JECT where ALL {target.bastion-session.username = 'deploy', target.resource.ocid = '${oci_core_instance.vm[each.value].id}'}",
+    "Allow group ${oci_identity_group.ci[each.key].name} to manage bastion-session in compartment JECT where target.resource.ocid = '${oci_core_instance.vm[each.value].id}'",
     "Allow group ${oci_identity_group.ci[each.key].name} to read instances in compartment JECT",
+    # 세션을 만들 때 Bastion이 요청자 권한으로 대상 VM의 VNIC·사설 IP를 조회한다(없으면 NotAuthorizedOrNotFound / Unknown resource).
+    "Allow group ${oci_identity_group.ci[each.key].name} to read vnic-attachments in compartment JECT",
+    "Allow group ${oci_identity_group.ci[each.key].name} to read virtual-network-family in compartment JECT",
     "Allow group ${oci_identity_group.ci[each.key].name} to read instance-agent-plugins in compartment JECT",
     "Allow group ${oci_identity_group.ci[each.key].name} to inspect work-requests in compartment JECT",
   ]

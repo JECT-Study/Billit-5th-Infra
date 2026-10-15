@@ -6,6 +6,7 @@
 //	GET /version  빌드 커밋
 //
 // 환경변수: PORT, DB_HOST, DB_PORT, REDIS_HOST, REDIS_PORT, REDIS_PASSWORD_FILE, FAIL_READY(시험용)
+// 빌드 인자 FAIL_READY_DEFAULT=1로 만든 이미지는 /readyz가 항상 실패한다(배포 실패·자동 복구 시험용 "broken" 변형).
 package main
 
 import (
@@ -22,7 +23,10 @@ import (
 	"time"
 )
 
-var version = "dev"
+var (
+	version   = "dev"
+	failReady = "" // 빌드 때 -X main.failReady=1 이면 readiness가 항상 실패
+)
 
 func env(k, def string) string {
 	if v := os.Getenv(k); v != "" {
@@ -87,7 +91,7 @@ func main() {
 		w.Write([]byte("ok\n"))
 	})
 	mux.HandleFunc("GET /readyz", func(w http.ResponseWriter, _ *http.Request) {
-		if os.Getenv("FAIL_READY") == "1" {
+		if os.Getenv("FAIL_READY") == "1" || failReady == "1" {
 			http.Error(w, "not ready\n", http.StatusServiceUnavailable)
 			return
 		}

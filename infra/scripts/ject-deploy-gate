@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+# deploy 계정의 SSH 강제 명령(authorized_keys의 command=). CI가 보낸 명령을 검사한 뒤
+# ject-deploy만 sudo로 실행한다. 셸을 거치지 않으므로 인자 주입·다른 명령 실행이 불가능하다.
+#   허용: ject-deploy deploy   <env> <be|fe> <ghcr.io/...@sha256:...> <actor> [registry-user]
+#         ject-deploy rollback <env> <be|fe> <actor>
+#         ject-deploy status   <env>
+#   <env>는 이 VM의 역할에 맞는 값만 허용한다(운영 앱 VM=prod, 개발 VM=dev).
+# 표준입력(레지스트리 토큰)은 그대로 ject-deploy에 전달된다.
+set -euo pipefail
+deny() { echo "ject-deploy-gate: $*" >&2; exit 2; }
+
+case "$(cat /etc/ject/role 2>/dev/null)" in
+  prod-app) ENV_OK=prod ;;
+  dev)      ENV_OK=dev ;;
+  *)        deny "이 VM에서는 배포를 받지 않는다" ;;
+esac
+
+CMDLINE="${SSH_ORIGINAL_COMMAND:-}"
+[ "${#CMDLINE}" -le 400 ] || deny "명령이 너무 길다"
+[[ "$CMDLINE" =~ ^[A-Za-z0-9\ ._:/@-]+$ ]] || deny "허용되지 않은 문자"
+read -r -a A <<< "$CMDLINE"
+[ "${A[0]:-}" = ject-deploy ] || deny "ject-deploy만 허용"
+[ "${A[2]:-}" = "$ENV_OK" ] || deny "이 VM의 환경은 $ENV_OK"
+
+re_svc='^(be|fe)$'
+re_img='^ghcr\.io/[a-z0-9._/-]+@sha256:[a-f0-9]{64}$'
+re_actor='^[A-Za-z0-9._:@-]{1,80}$'
+re_user='^[A-Za-z0-9._-]{1,39}$'
+case "${A[1]:-}" in
+  deploy)
+    [ "${#A[@]}" -ge 6 ] && [ "${#A[@]}" -le 7 ] || deny "인자 수 오류"
+    [[ "${A[3]}" =~ $re_svc ]] && [[ "${A[4]}" =~ $re_img ]] && [[ "${A[5]}" =~ $re_actor ]] || deny "인자 형식 오류"
+    [ "${#A[@]}" -eq 6 ] || [[ "${A[6]}" =~ $re_user ]] || deny "레지스트리 사용자 형식 오류" ;;
+  rollback)
+    [ "${#A[@]}" -eq 5 ] || deny "인자 수 오류"
+    [[ "${A[3]}" =~ $re_svc ]] && [[ "${A[4]}" =~ $re_actor ]] || deny "인자 형식 오류" ;;
+  status)
+    [ "${#A[@]}" -eq 3 ] || deny "인자 수 오류" ;;
+  *) deny "deploy|rollback|status만 허용" ;;
+esac
+logger -t ject-deploy-gate "from=${SSH_CLIENT%% *} cmd=${A[1]} env=${A[2]} args=${#A[@]}"
+exec sudo -n /opt/ject/bin/ject-deploy "${A[@]:1}"

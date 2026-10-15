@@ -9,6 +9,8 @@ on:
       dockerfile: { type: string, required: false, default: Dockerfile }
       image_name: { type: string, required: true, description: "예: ject-be (ghcr.io/<owner>/<image_name>)" }
       runner:     { type: string, required: false, default: ubuntu-24.04-arm }
+      tag_suffix: { type: string, required: false, default: "", description: "태그 접미사(예: -broken). 기본 sha-<커밋>" }
+      extra_build_args: { type: string, required: false, default: "", description: "추가 빌드 인자(한 줄에 하나, KEY=VALUE)" }
     outputs:
       image:
         description: "ghcr.io/<owner>/<name>@sha256:..."
@@ -45,8 +47,10 @@ jobs:
           platforms: linux/arm64
           push: true
           provenance: false
-          build-args: VERSION=${{ github.sha }}
-          tags: ${{ steps.meta.outputs.repo }}:sha-${{ github.sha }}
+          build-args: |
+            VERSION=${{ github.sha }}
+            ${{ inputs.extra_build_args }}
+          tags: ${{ steps.meta.outputs.repo }}:sha-${{ github.sha }}${{ inputs.tag_suffix }}
           labels: org.opencontainers.image.revision=${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

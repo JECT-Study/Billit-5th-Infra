@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# CI 배포 키를 deploy 계정에 등록한다(root). 환경(VM)마다 다른 키를 쓴다.
+#   ject-deploy-key install <공개키 파일> <Bastion 사설 IP>
+#   ject-deploy-key show
+# 등록되는 줄: from="<Bastion IP>",restrict,command="/opt/ject/bin/ject-deploy-gate" <공개키>
+#   - Bastion 엔드포인트에서 온 접속만 허용, 포트·에이전트 포워딩과 터미널 금지
+#   - 로그인하면 ject-deploy-gate만 실행된다(셸 없음)
+# 기존 deploy 키는 교체된다(키 회전). 개인키는 받지 않는다.
+set -euo pipefail
+[ "$(id -u)" -eq 0 ] || { echo "root로 실행" >&2; exit 1; }
+AK=/home/deploy/.ssh/authorized_keys
+case "${1:-}" in
+install)
+  keyfile="${2:?공개키 파일}"; bastion_ip="${3:?Bastion 사설 IP}"
+  [[ "$bastion_ip" =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}$ ]] || { echo "IP 형식 오류" >&2; exit 1; }
+  grep -q "PRIVATE KEY" "$keyfile" && { echo "개인키는 받지 않는다" >&2; exit 1; }
+  [ "$(grep -cv '^\s*$' "$keyfile")" -eq 1 ] || { echo "공개키 한 줄만 허용" >&2; exit 1; }
+  ssh-keygen -l -f "$keyfile" >/dev/null || { echo "공개키 형식 오류" >&2; exit 1; }
+  [ -x /opt/ject/bin/ject-deploy-gate ] || { echo "ject-deploy-gate 없음(install-role.sh 먼저)" >&2; exit 1; }
+  key="$(grep -v '^\s*$' "$keyfile" | awk '{print $1" "$2" "$3}')"
+  tmp="$(mktemp)"
+  printf 'from="%s",restrict,command="/opt/ject/bin/ject-deploy-gate" %s\n' "$bastion_ip" "$key" > "$tmp"
+  install -m 0600 -o deploy -g deploy "$tmp" "$AK"; rm -f "$tmp"
+  echo "ok: deploy $(ssh-keygen -l -f "$keyfile" | awk '{print $2}') from=$bastion_ip" ;;
+show)
+  ssh-keygen -l -f "$AK" 2>/dev/null || echo "no key"
+  sed -E 's/ (ssh-[a-z0-9]+|ecdsa-[a-z0-9-]+) .*/ \1 …/' "$AK" ;;
+*) echo "usage: ject-deploy-key install <pubkey> <bastion-ip> | show" >&2; exit 2 ;;
+esac

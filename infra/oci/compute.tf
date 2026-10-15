@@ -42,9 +42,10 @@ resource "oci_core_instance" "vm" {
     are_all_plugins_disabled = false
     is_management_disabled   = false
     is_monitoring_disabled   = true # 이번 범위에서 OCI Monitoring 수집은 쓰지 않는다
+    # A1 + Ubuntu에서는 Bastion 플러그인(관리형 SSH 세션)이 지원되지 않는다. 포트 포워딩 세션만 쓴다.
     plugins_config {
       name          = "Bastion"
-      desired_state = "ENABLED"
+      desired_state = "DISABLED"
     }
   }
 

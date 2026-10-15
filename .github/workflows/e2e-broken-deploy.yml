@@ -1,0 +1,32 @@
+# 검증 전용(이 저장소에만 둔다, 앱 저장소로 옮기지 않음):
+# readiness가 항상 실패하는 스모크 이미지(-broken)를 만들어 개발 VM에 배포한다.
+# 기대 결과: ject-deploy가 새 이미지 검증 실패 → 직전 이미지로 자동 복구 → 이 실행은 "실패"로 끝나고
+# 개발 VM의 deploy-history.jsonl에 rolled_back이 남는다. dev-verified 상태는 붙지 않는다.
+name: e2e-broken-deploy
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    permissions: { contents: read, packages: write }
+    uses: ./.github/workflows/build-arm64.yml
+    with:
+      image_name: ject-be
+      context: infra/smoke-app
+      runner: ubuntu-24.04
+      tag_suffix: -broken
+      extra_build_args: FAIL_READY_DEFAULT=1
+
+  deploy-dev:
+    needs: build
+    permissions: { contents: read, packages: read, statuses: write }
+    uses: ./.github/workflows/deploy-via-bastion.yml
+    with:
+      environment: dev
+      image: ${{ needs.build.outputs.image }}
+      commit: ${{ github.sha }}
+    secrets: inherit
