@@ -1,0 +1,18 @@
+# 로컬 개발(APP_ENV 없음). DB·Redis는 저장소 루트의 compose.yaml.
+spring:
+  docker:
+    compose:
+      # bootRun·IDE 실행 때 compose.yaml을 자동으로 띄우고, 앱을 꺼도 DB·Redis는 켜 둔다(다음 실행이 빠름).
+      lifecycle-management: start-only
+  # Docker Compose 지원을 쓰면 아래 값은 자동으로 덮인다. 직접 띄운 DB에 붙을 때를 위한 값(compose.yaml과 같음).
+  data:
+    redis:
+      port: 16379
+  datasource:
+    url: jdbc:postgresql://localhost:15432/ject
+    username: ject
+    password: ject
+
+logging:
+  level:
+    com.ject: debug

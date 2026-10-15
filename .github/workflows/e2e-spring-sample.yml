@@ -1,0 +1,30 @@
+# 검증 전용(이 저장소에만 둔다): templates/backend(Spring Boot 4 템플릿)를 적용한 샘플을
+# x86 러너에서 ARM64 이미지로 빌드(빌드 단계는 $BUILDPLATFORM)해 개발 VM에 배포한다.
+# 확인하는 것: Compose secret(redis_password) 읽기, dev 프로필, Flyway, /readyz(DB·Redis), HEALTHCHECK.
+# 끝나면 개발 VM은 스모크 이미지로 되돌리고 샘플이 만든 테이블은 지운다(실제 앱의 Flyway 이력과 섞이지 않게).
+name: e2e-spring-sample
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    permissions: { contents: read, packages: write }
+    uses: ./.github/workflows/build-arm64.yml
+    with:
+      image_name: ject-be-spring
+      context: spring-sample
+      runner: ubuntu-24.04
+
+  deploy-dev:
+    needs: build
+    permissions: { contents: read, packages: read, statuses: write }
+    uses: ./.github/workflows/deploy-via-bastion.yml
+    with:
+      environment: dev
+      image: ${{ needs.build.outputs.image }}
+      commit: ${{ github.sha }}
+    secrets: inherit
