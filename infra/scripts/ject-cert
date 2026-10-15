@@ -20,14 +20,15 @@ issue)
   [ -n "${PROD_DOMAIN:-}" ] || { echo "PROD_DOMAIN 미설정" >&2; exit 1; }
   domains=(-d "$PROD_DOMAIN"); [ -n "${DEV_DOMAIN:-}" ] && domains+=(-d "$DEV_DOMAIN")
   email=(--register-unsafely-without-email); [ -n "${ACME_EMAIL:-}" ] && email=(--email "$ACME_EMAIL")
-  $EDGE run --rm certbot certonly --webroot -w /var/www/acme --cert-name "$CERT_NAME" \
+  $EDGE run --rm -T certbot certonly --webroot -w /var/www/acme --cert-name "$CERT_NAME" \
     "${domains[@]}" "${email[@]}" --agree-tos --non-interactive --keep-until-expiring
   reload_nginx ;;
 renew)
   # 표식은 재적용에 성공한 뒤에만 지운다(재적용 실패 시 다음 실행에서 다시 시도).
-  $EDGE run --rm certbot renew --webroot -w /var/www/acme --deploy-hook "touch /etc/letsencrypt/.renewed"
+  # 타이머(RandomizedDelaySec)가 이미 시각을 흩뜨리므로 certbot 자체의 무작위 대기(최대 8분)는 끈다.
+  $EDGE run --rm -T certbot renew --webroot -w /var/www/acme --no-random-sleep-on-renew --deploy-hook "touch /etc/letsencrypt/.renewed"
   if [ -f "$MARK" ]; then reload_nginx && rm -f "$MARK"; echo "renewed and reloaded"; else echo "no renewal needed"; fi ;;
 dry-run)
-  $EDGE run --rm certbot renew --webroot -w /var/www/acme --dry-run ;;
+  $EDGE run --rm -T certbot renew --webroot -w /var/www/acme --no-random-sleep-on-renew --dry-run ;;
 *) echo "usage: ject-cert issue|renew|dry-run" >&2; exit 2 ;;
 esac
