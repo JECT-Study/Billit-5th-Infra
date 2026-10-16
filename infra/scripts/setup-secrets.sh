@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# 서버 안에서 비밀값을 생성한다(이미 있으면 덮어쓰지 않음). 값은 출력하지 않는다.
-#   sudo setup-secrets.sh prod-data | dev
-#   sudo setup-secrets.sh prod-app-env <DATA_PRIVATE_IP>   ← 표준입력으로 "PG_APP_PASSWORD REDIS_PASSWORD" 한 줄
-#   sudo setup-secrets.sh dev-app-env                       ← 같은 VM의 개발 DB 비밀값으로 dev-be.env 작성
-#   sudo setup-secrets.sh obs                               ← (개발 VM) Grafana 관리자·수집기 쓰기 비밀번호, obs-gateway 해시
-#   sudo setup-secrets.sh obs-push                          ← (운영 VM) 표준입력 한 줄 = 개발 VM의 obs_push_password
-#   sudo setup-secrets.sh obs-env <host> <env> <DEV_IP>     ← /etc/ject/obs.env (수집기가 보낼 주소)
-#   sudo setup-secrets.sh dev-swagger                       ← (개발 VM) Swagger Basic 인증 비밀번호·해시(사용자 ject)
-# APP_UID: 앱 컨테이너 실행 UID (ject-smoke=65532). 앱 이미지가 바뀌면 다시 맞춘다.
+# 비밀값은 서버 안에서 만든다. 이미 있으면 그대로 두고, 값은 화면에 찍지 않는다.
+#   sudo setup-secrets.sh prod-data | dev                   DB/Redis 비밀번호
+#   sudo setup-secrets.sh prod-app-env <DATA_PRIVATE_IP>    stdin 한 줄: "PG_APP_PASSWORD REDIS_PASSWORD"
+#   sudo setup-secrets.sh dev-app-env                       같은 VM의 개발 DB 값으로 dev-be.env
+#   sudo setup-secrets.sh obs                               (dev) Grafana 관리자, 수집기 쓰기 비밀번호, obs-gateway 해시
+#   sudo setup-secrets.sh obs-push                          (prod) stdin 한 줄 = dev VM의 obs_push_password
+#   sudo setup-secrets.sh obs-env <host> <env> <DEV_IP>     /etc/ject/obs.env
+#   sudo setup-secrets.sh dev-swagger                       (dev) Swagger Basic 인증(사용자 ject)
+# APP_UID: 앱 컨테이너 UID(ject-smoke=65532). 앱 이미지가 바뀌면 맞춘다.
 set -euo pipefail
 umask 077
 S=/srv/ject/secrets

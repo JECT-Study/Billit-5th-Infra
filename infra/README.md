@@ -29,7 +29,7 @@ OCI Health Checks는 무료 한도가 없어 쓰지 않는다(공인 주소 시�
 | `compose/agent.yaml`, `compose/obs.yaml` | 수집기(3대: Node Exporter·Alloy), 관측 스택(개발 VM: Prometheus·Loki·Grafana·obs-gateway) |
 | `smoke-app/` | **실제 JECT 앱이 아님.** 배포 경로 검증용 최소 이미지(/healthz, /readyz=DB·Redis 연결, /version) |
 | `github-workflows/` | 앱 저장소의 `.github/workflows/`에 넣을 ARM64 빌드·GHCR·Bastion(포트 포워딩) 배포 워크플로. 옮기는 방법·권한은 `github-workflows/README.md` |
-| `access/` | 팀원 계정 정책·공개키 제출·macOS/Windows 접속 안내, Bastion 포트 포워딩 접속 스크립트, 팀원 요청 안내문 |
+| `access/` | 팀원 계정·접속 방법(Tailscale, 비상용 Bastion 스크립트), 팀원에게 보내는 안내문 |
 | `tests/` | 로컬 통합 시험(`local-e2e.sh` 배포·백업, `local-obs-e2e.sh` 모니터링·Swagger·Redis 정책)과 OCI CLI 대역 |
 
 ## 서버 배치
@@ -40,9 +40,11 @@ OCI Health Checks는 무료 한도가 없어 쓰지 않는다(공인 주소 시�
 | `ject-prod-data` | 사설 | `ject-prod-data`(PostgreSQL, Redis), 백업 타이머 | 없음. 5432·6379는 운영 앱 NSG에서만 |
 | `ject-dev-obs` | 사설 | `ject-dev-gateway`(Nginx :8080), `ject-dev`(be, fe), `ject-dev-data` | 없음. 8080은 운영 앱 NSG에서만 |
 
-SSH 22는 세 VM 모두 Bastion 엔드포인트 /32에서만 허용한다. 사설 VM의 아웃바운드는 NAT, Object Storage는 Service Gateway.
-A1(ARM) + Ubuntu는 Bastion **관리형 SSH 세션을 지원하지 않으므로**(OCI 알려진 문제) 사람·CI 모두 **포트 포워딩 세션**으로 22번에 터널을 연 뒤
-VM에 등록된 키로 로그인한다. CI 사용자는 `target.resource.ocid` 조건으로 자기 VM 대상 세션만 만들 수 있고, 세션 조회·VNIC 조회 권한이 따로 필요하다(`oci/storage_iam.tf`).
+SSH 22는 NSG에서 Bastion 엔드포인트 /32만 허용한다(인터넷에 열지 않음). 사설 VM의 아웃바운드는 NAT, Object Storage는 Service Gateway.
+사람은 **Tailscale**로 들어간다(2026-10-16부터, `scripts/install-tailscale.sh`, 서버는 `tag:ject`, 팀원은 tcp/22만 — `access/README.md`).
+Tailscale은 서버가 바깥으로 연결을 거는 방식이라 NSG에 추가로 열 포트가 없다.
+CI는 그대로 Bastion 포트 포워딩 세션(A1+Ubuntu는 관리형 SSH 세션이 안 됨). CI 사용자는 `target.resource.ocid` 조건으로 자기 VM 대상 세션만 만들 수 있고, 세션 조회·VNIC 조회 권한이 따로 필요하다(`oci/storage_iam.tf`).
+sshd는 키 로그인만, `AllowGroups ject-admins deploy`, `MaxAuthTries 3`.
 
 ## 구축 순서 (요약)
 

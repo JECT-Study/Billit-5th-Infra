@@ -1,12 +1,10 @@
 #!/usr/bin/env bash
-# 운영 PostgreSQL 일일 논리 백업 → 비공개 Object Storage 버킷 (운영 데이터 VM에서 root로 실행)
-#  - DB별 pg_dump custom format + 역할(globals) + 테이블별 행 수가 담긴 MANIFEST.json
-#  - 행 수는 pg_dump와 같은 스냅숏(pg_export_snapshot)에서 센다 → 복원 시험이 동시 쓰기에 흔들리지 않음
-#  - 데이터 파일 업로드·원격 크기 확인이 끝난 뒤 MANIFEST.json을 마지막에 올린다(= 성공 표식)
-#  - 보존: 성공한 실행 기준 최근 RETAIN_DAYS(7)일. 7일보다 오래됐어도 최신 성공 RETAIN_MIN개는 남긴다
-#    (백업이 며칠 실패해도 마지막 정상 사본이 지워지지 않음). MANIFEST 없는 실패 잔여물은 1일 뒤 정리
-#  - 결과: /srv/ject/backup-status/last.json, last-success.json, history.jsonl (실패 시 종료 코드 1)
-# 인증: OCI Instance Principal (동적 그룹 ject-prod-data-dg, 백업 버킷에만 권한)
+# 운영 PostgreSQL 일일 백업 → 비공개 버킷(ject-db-backups). 운영 데이터 VM에서 root로 돈다.
+# pg_dump(custom) + globals + 테이블별 행 수 MANIFEST.json. MANIFEST는 전부 올라간 뒤 마지막에 올린다(성공 표식).
+# 행 수는 pg_dump와 같은 스냅숏에서 세서 복원 시험이 흔들리지 않게 한다.
+# 보존: 최근 RETAIN_DAYS(7)일, 그래도 최신 성공 RETAIN_MIN개는 남김. MANIFEST 없는 찌꺼기는 하루 뒤 정리.
+# 결과: /srv/ject/backup-status/last.json, last-success.json, history.jsonl. 실패하면 exit 1.
+# 인증은 인스턴스 주체(동적 그룹 ject-prod-data-dg, 백업 버킷 권한만).
 set -euo pipefail
 umask 077
 

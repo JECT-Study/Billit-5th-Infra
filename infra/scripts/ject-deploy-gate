@@ -1,11 +1,7 @@
 #!/usr/bin/env bash
-# deploy 계정의 SSH 강제 명령(authorized_keys의 command=). CI가 보낸 명령을 검사한 뒤
-# ject-deploy만 sudo로 실행한다. 셸을 거치지 않으므로 인자 주입·다른 명령 실행이 불가능하다.
-#   허용: ject-deploy deploy   <env> <be|fe> <ghcr.io/...@sha256:...> <actor> [registry-user]
-#         ject-deploy rollback <env> <be|fe> <actor>
-#         ject-deploy status   <env>
-#   <env>는 이 VM의 역할에 맞는 값만 허용한다(운영 앱 VM=prod, 개발 VM=dev).
-# 표준입력(레지스트리 토큰)은 그대로 ject-deploy에 전달된다.
+# deploy 계정 authorized_keys의 command=. CI가 보낸 명령을 검사해서 ject-deploy만 sudo로 실행한다.
+# 허용: ject-deploy deploy|rollback|status, env는 이 VM 역할에 맞는 것만(prod-app=prod, dev=dev).
+# stdin(레지스트리 토큰)은 그대로 넘긴다.
 set -euo pipefail
 deny() { echo "ject-deploy-gate: $*" >&2; exit 2; }
 

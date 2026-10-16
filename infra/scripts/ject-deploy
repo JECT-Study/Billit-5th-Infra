@@ -1,19 +1,11 @@
 #!/usr/bin/env bash
-# JECT 앱 배포 (운영 앱 VM / 개발 VM에서 root로 실행. CI는 deploy 계정의 sudo로만 호출)
-#
-#   ject-deploy deploy   <prod|dev> <be|fe> <image@sha256:digest> [actor] [registry-user]
-#       registry-user를 주면 표준입력에서 읽은 토큰으로 이번 pull에만 임시 로그인한다
-#       (CI의 GITHUB_TOKEN packages:read. 서버에 장기 레지스트리 자격증명을 두지 않음)
-#   ject-deploy rollback <prod|dev> <be|fe> [actor]      직전 성공 이미지로 되돌림
+# 앱 배포. root로 실행하고, CI는 deploy 계정 sudo로 부른다.
+#   ject-deploy deploy   <prod|dev> <be|fe> <image@sha256:...> [actor] [registry-user]
+#       registry-user를 주면 stdin의 토큰으로 이번 pull만 로그인한다(서버에 레지스트리 로그인을 남기지 않음)
+#   ject-deploy rollback <prod|dev> <be|fe> [actor]      직전 성공 이미지로
 #   ject-deploy status   <prod|dev>
-#
-# 보장하는 것:
-#   - 같은 환경의 동시 배포 금지(flock, 대기하지 않고 실패)
-#   - digest 고정 이미지만 허용, 허용된 레지스트리 접두사만 허용
-#   - 디스크 여유 확인 → pull → Compose 검증 → 대상 서비스만 교체(--no-deps)
-#   - 컨테이너 healthcheck(healthy) + 앱 readiness + Nginx 경유 readiness 확인
-#   - 실패 시 이전 이미지로 자동 복구 후 다시 확인, 결과를 deploy-history.jsonl에 기록
-# 하지 않는 것: DB·Redis·Nginx 재시작, DB 마이그레이션 되돌리기, 전체 compose down
+# 같은 환경 동시 배포는 막고(flock), digest 고정 이미지만 받는다. 올린 뒤 healthcheck + /readyz가 안 되면
+# 이전 이미지로 되돌린다. 기록은 deploy-history.jsonl. DB/Redis/nginx는 건드리지 않는다.
 set -euo pipefail
 umask 027
 

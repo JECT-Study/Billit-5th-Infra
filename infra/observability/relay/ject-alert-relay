@@ -1,19 +1,17 @@
 #!/usr/bin/env python3
-"""ject-alert-relay: Grafana 알림(webhook) → OCI Notifications 주제(ject-alerts) → 이메일.
+"""Grafana 알림(webhook) → OCI Notifications(ject-alerts) → 이메일.
 
-개발·모니터링 VM의 systemd 서비스로 127.0.0.1에서만 받는다(Grafana도 호스트 네트워크·루프백).
-OCI 인증은 인스턴스 주체(이 VM의 동적 그룹은 ject-alerts 주제에만 발행 가능, infra/oci/monitoring.tf).
-실행 파이썬은 /opt/ject/oci-cli 가상환경(oci SDK 포함)이다.
+dev VM의 systemd 서비스. 127.0.0.1에서만 받는다. OCI 인증은 인스턴스 주체(ject-alerts 주제에만 발행 가능).
+파이썬은 /opt/ject/oci-cli 가상환경(oci SDK 포함).
 
-환경변수(/etc/ject/alert-relay.env):
-  ALERT_TOPIC_ID   ject-alerts 주제 OCID (필수, DRY_RUN=1이면 없어도 됨)
+/etc/ject/alert-relay.env:
+  ALERT_TOPIC_ID   ject-alerts 주제 OCID
   RELAY_LISTEN     기본 127.0.0.1:9095
-  DRY_RUN          1이면 OCI에 보내지 않고 표준출력에만 쓴다(로컬 시험용)
+  DRY_RUN=1        OCI로 안 보내고 stdout에만 (로컬 시험)
 
-경로:
-  POST /grafana    Grafana webhook 본문(JSON)
-  POST /test       시험 메일 1통(제목·본문 고정) — 알림 수신 확인용
-  GET  /healthz    상태
+POST /grafana  Grafana webhook
+POST /test     시험 메일 1통
+GET  /healthz
 """
 import datetime as dt
 import json

@@ -1,11 +1,9 @@
 #!/usr/bin/env bash
-# CI 배포 키를 deploy 계정에 등록한다(root). 환경(VM)마다 다른 키를 쓴다.
+# CI 배포용 공개키를 deploy 계정에 등록한다(root). VM마다 다른 키. 기존 키는 교체된다.
 #   ject-deploy-key install <공개키 파일> <Bastion 사설 IP>
 #   ject-deploy-key show
 # 등록되는 줄: from="<Bastion IP>",restrict,command="/opt/ject/bin/ject-deploy-gate" <공개키>
-#   - Bastion 엔드포인트에서 온 접속만 허용, 포트·에이전트 포워딩과 터미널 금지
-#   - 로그인하면 ject-deploy-gate만 실행된다(셸 없음)
-# 기존 deploy 키는 교체된다(키 회전). 개인키는 받지 않는다.
+# → Bastion에서 온 접속만, 셸 없이 ject-deploy-gate만 실행된다.
 set -euo pipefail
 [ "$(id -u)" -eq 0 ] || { echo "root로 실행" >&2; exit 1; }
 AK=/home/deploy/.ssh/authorized_keys

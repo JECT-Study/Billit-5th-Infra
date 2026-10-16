@@ -7,7 +7,7 @@ members:
   - username: seongju
     name: 홍성주
     role: BE (인프라 담당, 관리자)
-    public_key: ~/.ssh/id_ed25519.pub   # 본인 키. 2026-10-15 3대에 적용(cloud-init), Bastion 포트 포워딩 접속 확인
+    public_key: ~/.ssh/id_ed25519.pub   # 본인 키. 2026-10-15 3대에 적용(cloud-init). 접속은 Tailscale(2026-10-16), Bastion은 비상용
     oci_email: ""                       # 테넌시 소유자 계정 사용
   - username: sanghyuk
     name: 박상혁

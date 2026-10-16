@@ -18,8 +18,8 @@ proxy_common='
         proxy_set_header Connection $connection_upgrade;
         proxy_read_timeout 60s;'
 
-# 개발 게이트웨이는 운영 Nginx 뒤에 있다: 앞단이 넣은 X-Forwarded-Proto(https)를 덮어쓰지 않는다
-# (덮어쓰면 앱이 http로 링크를 만들어 HTTPS Swagger의 요청이 막힌다 — 2026-10-15 실측).
+# 개발 게이트웨이는 운영 nginx 뒤에 있으니 앞단의 X-Forwarded-Proto를 덮어쓰면 안 된다
+# (덮어쓰면 앱이 http 링크를 만들어서 Swagger가 깨짐).
 PC="$proxy_common"
 
 # 관리·관측 엔드포인트는 공개 경로로 연결하지 않는다. API 문서(Swagger)는 운영에서 항상 막는다.
@@ -83,8 +83,8 @@ common_headers='
     add_header X-Content-Type-Options nosniff always;
     add_header Referrer-Policy strict-origin-when-cross-origin always;'
 
-# nginx.conf는 컨테이너에 "파일"로 마운트돼 있다. 새 파일로 바꾸면(새 inode) 실행 중인 컨테이너는 옛 파일을 계속 본다
-# → 기존 파일 내용을 제자리에서 덮어쓴다(2026-10-15 실측: install로 바꾼 nginx.conf가 반영되지 않아 nginx -t 실패).
+# nginx.conf는 컨테이너에 파일 단위로 마운트돼 있어서 새 파일로 갈아끼우면(새 inode) 컨테이너는 옛 파일을 본다.
+# 그래서 제자리에서 내용만 덮어쓴다.
 put_main_conf() {   # dest
   if [ -f "$1" ]; then cat "$SRC_DIR/nginx/nginx.conf" > "$1"; else install -m 0644 "$SRC_DIR/nginx/nginx.conf" "$1"; fi
 }

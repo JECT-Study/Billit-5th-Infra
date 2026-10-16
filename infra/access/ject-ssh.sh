@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # OCI Bastion 포트 포워딩 세션을 만들고 JECT VM에 본인 리눅스 계정으로 접속한다.
+# 평소에는 Tailscale로 들어간다(ssh seongju@ject-dev). 이 스크립트는 Tailscale이 안 될 때 쓰는 비상 경로.
 #   ject-ssh.sh <리눅스 사용자명> <prod-app|prod-data|dev> [명령...]
 # A1(ARM) + Ubuntu VM은 Bastion 관리형 SSH 세션을 지원하지 않는다(OCI Bastion 알려진 문제).
 # 그래서 Bastion은 VM의 22번까지 터널만 열고, 로그인은 VM에 등록된 본인 공개키로 한다.

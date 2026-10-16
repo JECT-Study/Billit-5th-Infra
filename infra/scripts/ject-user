@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# JECT VM 개발자 계정 관리 (root). 본인이 만든 공개키만 등록한다. 개인키를 대신 만들지 않는다.
-#   ject-user add <username> <공개키 파일> ["표시 이름"]   계정 생성(또는 키 교체) + ject-admins(sudo)
-#   ject-user lock <username>                             로그인 차단(홈 디렉터리는 보존)
+# 팀원 계정 관리(root). 본인이 보낸 공개키(.pub)만 받는다.
+#   ject-user add <username> <공개키 파일> ["이름"]   계정 생성 또는 키 교체. ject-admins(sudo)에 넣는다
+#   ject-user lock <username>                        로그인 막기. 홈은 남겨둔다
 #   ject-user list
 set -euo pipefail
 [ "$(id -u)" -eq 0 ] || { echo "root로 실행" >&2; exit 1; }
