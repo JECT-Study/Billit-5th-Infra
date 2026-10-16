@@ -1,24 +1,43 @@
-# ject-infra (검증용)
+# Trip-Sheet-5th-Infra
 
-**인프라 코드 원본은 팀 저장소 [`JECT-Study/Trip-Sheet-5th-Infra`](https://github.com/JECT-Study/Trip-Sheet-5th-Infra)다(2026-10-17부터).**
-이 저장소는 스모크 앱으로 배포 파이프라인을 시험하는 사본이라 `.github/workflows`와 `spring-sample`이 더 있다. `infra/`는 두 저장소에 같이 반영하고, CD를 앱 저장소로 옮기면 이 저장소는 보관(archive)한다.
+Trip Sheet(JECT 5기 3팀) 서버 인프라 코드입니다. 담당: 홍성주
 
-JECT 5기 3팀 인프라 코드와 배포 파이프라인 검증 저장소. `infra/smoke-app`은 실제 서비스가 아니라
-ARM64 빌드 → GHCR → OCI Bastion(포트 포워딩) → ject-deploy 배포·자동 복구·롤백 경로를 확인하기 위한 최소 이미지다.
-실제 앱 저장소가 생기면 `infra/github-workflows`의 워크플로를 그 저장소의 `.github/workflows`로 옮긴다.
-비밀값·IP·OCID는 저장소에 두지 않는다(GitHub Environment 비밀값/변수로만 둔다).
+## 구성
 
-## 워크플로
-
-| 파일 | 용도 |
+| 서버 | 하는 일 |
 | --- | --- |
-| `ci-cd.yml` | main push: ARM64 빌드 → GHCR → 개발 VM 자동 배포 → 커밋에 `ject/dev-verified`(digest). 수동 실행: 운영 승격(개발 검증 digest만)·롤백 |
-| `build-arm64.yml` | 재사용: linux/arm64 이미지 빌드·푸시, digest 출력 |
-| `deploy-via-bastion.yml` | 재사용: Bastion 포트 포워딩 세션 → deploy 계정(강제 명령 ject-deploy-gate) → `ject-deploy` |
-| `e2e-broken-deploy.yml` | 검증 전용: readiness가 실패하는 `-broken` 이미지를 개발에 배포해 자동 복구를 확인(실행 결과는 "실패"가 정상) |
+| 운영 앱 서버 (`ject-prod-app`) | Nginx(HTTPS), 운영 BE |
+| 운영 DB 서버 (`ject-prod-data`) | PostgreSQL 17, Redis 7.4, 매일 새벽 4시 백업 |
+| 개발 + 모니터링 서버 (`ject-dev`) | 개발 BE·DB, Prometheus·Loki·Grafana, 장애 알림 |
 
-## Environment
+세 대 모두 OCI Ampere A1 1코어·6GB·50GB이고 무료 한도 안에서 운영합니다.
 
-`development`(개발 VM), `production`(운영 앱 VM). 둘 다 배포 브랜치는 `main`만 허용한다.
-GitHub Free 비공개 저장소라 Required reviewers·wait timer는 쓸 수 없다. 운영 배포는 수동 실행(workflow_dispatch)과
-개발 검증 digest 확인으로만 막는다.
+배포는 앱 저장소([Trip-Sheet-5th-Server](https://github.com/JECT-Study/Trip-Sheet-5th-Server))에서 시작합니다.
+GitHub Actions가 ARM64 이미지를 만들어 GHCR에 올리고, 개발 서버에는 자동으로, 운영 서버에는 개발에서 확인된 이미지만 수동으로 배포합니다.
+배포 뒤 상태 확인에 실패하면 이전 버전으로 자동 복구합니다.
+
+지금 서버에는 배포 경로 확인용 스모크 앱이 떠 있습니다. 앱 저장소에 CD를 붙이면 실제 앱으로 바뀝니다.
+
+## 폴더
+
+| 경로 | 내용 |
+| --- | --- |
+| `infra/oci/` | OCI 자원(OpenTofu): 네트워크, 서버, Bastion, 버킷, 권한, 알람 |
+| `infra/scripts/` | 서버 설치, 배포(`ject-deploy`), 백업·복원 시험, 인증서, 계정 관리 |
+| `infra/compose/` | 서버별 Docker Compose |
+| `infra/nginx/` | Nginx 기본 설정(서버별 설정은 `scripts/render-nginx.sh`가 만든다) |
+| `infra/observability/` | Prometheus·Loki·Alloy·Grafana 설정과 알림 규칙 |
+| `infra/github-workflows/` | 앱 저장소에 넣을 빌드·배포 워크플로(이 저장소에서는 실행되지 않음) |
+| `infra/access/` | 서버 접속 방법(Tailscale)과 팀원 계정 |
+| `infra/tests/` | 로컬 통합 시험 |
+
+운영 방법은 [`infra/README.md`](infra/README.md), 접속은 [`infra/access/README.md`](infra/access/README.md)에 있습니다.
+
+## 서버 접속
+
+필요한 사람만 Tailscale로 접속합니다. SSH 공개키와 Tailscale 초대받을 이메일을 인프라 담당에게 보내 주세요.
+접속하지 않아도 개발·배포에는 지장 없습니다.
+
+## 저장소에 넣지 않는 것
+
+비밀값, IP, OCID, OpenTofu 상태 파일은 넣지 않습니다. 비밀값은 서버 안에서 만들고, CI에 필요한 값은 GitHub Environment에만 둡니다.
