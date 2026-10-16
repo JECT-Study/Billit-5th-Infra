@@ -12,7 +12,7 @@ members:
     role: BE 리더
     public_key: .local/ject-access/sanghyuk.pub   # SHA256:SmYttvfMmvxIWiKhwnFmkdBRN75VeGGzqv3dIqYetvU
     server_account: 2026-10-17
-    tailscale: 초대 전
+    tailscale: 초대 보냄(2026-10-17, 메일) — 수락 후 콘솔에서 승인
   - username: junwon
     role: BE
     public_key: ""
