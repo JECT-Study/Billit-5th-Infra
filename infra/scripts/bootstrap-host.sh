@@ -117,10 +117,10 @@ esac
 cat > /etc/motd <<CONF
 
  JECT 3팀 - $WHAT
-   - 배포는 CI가 해요. docker compose 직접 올리고 내리지 말아 주세요
-   - /srv/ject/secrets 는 열어보거나 복사하지 않기
+   - 배포는 CI가 해요. docker compose를 직접 올리고 내리지 마세요
+   - /srv/ject/secrets 안은 열어 보거나 복사하지 마세요
    - $HOW
-   - 설정을 바꿔야 하거나 이상하면 성주에게
+   - 설정을 바꿔야 하거나 이상하면 성주에게 말해 주세요
 
 CONF
 # 우분투 기본 안내 중 광고·업그레이드 권유는 끈다. 시스템 정보, 업데이트 수, 재부팅 필요 표시는 남긴다.

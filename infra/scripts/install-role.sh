@@ -7,16 +7,21 @@ ROLE="${1:?prod-app|prod-data|dev}"
 GHCR_OWNER="${2:?GHCR 소유자(소문자) — 배포 허용 이미지를 ghcr.io/<owner>/ject- 로 제한}"
 [[ "$GHCR_OWNER" =~ ^[a-z0-9-]+$ ]] || { echo "GHCR 소유자 형식 오류" >&2; exit 2; }
 SRC="$(cd "$(dirname "$0")/.." && pwd)"
-install -d -m 0755 /opt/ject/bin /opt/ject/compose /opt/ject/compose/initdb /opt/ject/nginx /etc/ject
+install -d -m 0755 /opt/ject/bin /opt/ject/compose /opt/ject/compose/initdb /etc/ject
 
-install -m 0755 "$SRC/scripts/render-nginx.sh" /opt/ject/bin/render-nginx.sh
 install -m 0755 "$SRC/scripts/setup-secrets.sh" /opt/ject/bin/setup-secrets.sh
 install -m 0755 "$SRC/scripts/ject-user" /opt/ject/bin/ject-user
-install -m 0644 "$SRC/nginx/nginx.conf" /opt/ject/nginx/nginx.conf
-# render-nginx.sh는 SRC_DIR/nginx/nginx.conf를 읽으므로 /opt/ject 아래에 같은 구조를 둔다.
+
+# Nginx가 있는 서버(운영 앱, 개발)만. render-nginx.sh는 SRC_DIR/nginx/nginx.conf를 읽으므로 /opt/ject 아래에 같은 구조를 둔다.
+install_nginx_tools() {
+  install -d -m 0755 /opt/ject/nginx
+  install -m 0755 "$SRC/scripts/render-nginx.sh" /opt/ject/bin/render-nginx.sh
+  install -m 0644 "$SRC/nginx/nginx.conf" /opt/ject/nginx/nginx.conf
+}
 
 case "$ROLE" in
 prod-app)
+  install_nginx_tools
   install -m 0755 "$SRC/scripts/ject-deploy" "$SRC/scripts/ject-deploy-gate" "$SRC/scripts/ject-deploy-key" /opt/ject/bin/
   install -m 0755 "$SRC/scripts/ject-cert" /opt/ject/bin/ject-cert
   install -m 0644 "$SRC/compose/prod-edge.yaml" "$SRC/compose/prod-app.yaml" /opt/ject/compose/
@@ -42,6 +47,7 @@ prod-data)
   systemctl enable ject-backup-metrics.service >/dev/null
   systemctl start ject-backup-metrics.service ;;
 dev)
+  install_nginx_tools
   install -m 0755 "$SRC/scripts/ject-deploy" "$SRC/scripts/ject-deploy-gate" "$SRC/scripts/ject-deploy-key" /opt/ject/bin/
   install -m 0644 "$SRC/compose/dev-data.yaml" "$SRC/compose/dev-app.yaml" "$SRC/compose/dev-gateway.yaml" /opt/ject/compose/
   install -m 0755 "$SRC/compose/initdb/10-app-role.sh" /opt/ject/compose/initdb/
