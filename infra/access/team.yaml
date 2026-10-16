@@ -8,11 +8,11 @@ members:
     public_key: ~/.ssh/id_ed25519.pub
     server_account: 2026-10-15   # cloud-init
     tailscale: tailnet 소유자
-  - username: sanghyuk
+  - username: sangcci
     role: BE 리더
-    public_key: .local/ject-access/sanghyuk.pub   # SHA256:SmYttvfMmvxIWiKhwnFmkdBRN75VeGGzqv3dIqYetvU
-    server_account: 2026-10-17
-    tailscale: 초대 보냄(2026-10-17, 메일) — 수락 후 콘솔에서 승인
+    public_key: .local/ject-access/sangcci.pub   # SHA256:SmYttvfMmvxIWiKhwnFmkdBRN75VeGGzqv3dIqYetvU
+    server_account: 2026-10-17   # 처음 sanghyuk로 만들고 본인 요청으로 sangcci로 이름 변경(같은 날)
+    tailscale: 초대·사용자 승인(2026-10-17), 기기 접속 대기
   - username: junwon
     role: BE
     public_key: ""

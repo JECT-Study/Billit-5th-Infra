@@ -26,7 +26,7 @@
 
 ## 인프라 담당이 할 일 (받은 사람만)
 
-1. 공개키를 `.local/ject-access/<username>.pub`에 저장하고 `team.yaml`의 상태를 고친다(이메일은 파일에 적지 않는다). username: sanghyuk / junwon / dana / minseo
+1. 공개키를 `.local/ject-access/<username>.pub`에 저장하고 `team.yaml`의 상태를 고친다(이메일은 파일에 적지 않는다). username은 본인에게 묻는다(영문 소문자). 정해진 것: sangcci(BE 리더). 나머지 기본안 junwon / dana / minseo
 2. 서버 3대에서 계정 생성(공개키는 표준입력으로 넘긴다)
    ```sh
    for h in ject-dev ject-prod-app ject-prod-data; do
