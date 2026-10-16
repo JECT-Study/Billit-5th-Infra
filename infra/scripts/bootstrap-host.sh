@@ -112,7 +112,7 @@ case "$ROLE" in
   prod-data) WHAT="운영 DB 서버. PostgreSQL, Redis, 새벽 4시 백업."
              HOW="백업 결과: cat /srv/ject/backup-status/last.json" ;;
   dev)       WHAT="개발 서버. 개발 BE/DB랑 모니터링(Grafana, Prometheus, Loki)."
-             HOW="상태: sudo ject-deploy status dev / Grafana는 ssh -L 3000:127.0.0.1:3000 으로" ;;
+             HOW="상태: sudo ject-deploy status dev" ;;
 esac
 cat > /etc/motd <<CONF
 
@@ -120,9 +120,14 @@ cat > /etc/motd <<CONF
    - 배포는 CI가 해요. docker compose 직접 올리고 내리지 말아 주세요
    - /srv/ject/secrets 는 열어보거나 복사하지 않기
    - $HOW
-   - 이상하면 성주에게
+   - 설정을 바꿔야 하거나 이상하면 성주에게
 
 CONF
+# 우분투 기본 안내 중 광고·업그레이드 권유는 끈다. 시스템 정보, 업데이트 수, 재부팅 필요 표시는 남긴다.
+if [ -f /etc/default/motd-news ]; then sed -i 's/^ENABLED=1/ENABLED=0/' /etc/default/motd-news; fi
+for f in 10-help-text 50-motd-news 91-contract-ua-esm-status 91-release-upgrade; do
+  if [ -f "/etc/update-motd.d/$f" ]; then chmod -x "/etc/update-motd.d/$f"; fi
+done
 
 # ---- SSH: 키 로그인만, ject-admins 그룹과 deploy만 ---------------------------------------
 # 22는 Tailscale(tag:ject)과 Bastion에서만 들어온다. 인터넷에 열지 않는다.
