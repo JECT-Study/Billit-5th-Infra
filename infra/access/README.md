@@ -19,6 +19,14 @@
 | ject-prod-data | `7w9aJRmiLkJMC8IiS+53aQcdfQlbclycjkzsggpRE7c` |
 | ject-dev | `BOaNMvOwxaITg+0tqf7qDhD6IKhf9YdS8d1q2/zbdMg` |
 
+## 처음 접속하는 순서 (팀원)
+
+1. 메일로 온 Tailscale 초대를 수락하고, 인프라 담당이 승인할 때까지 기다린다.
+2. Tailscale 앱을 설치해 초대받은 계정으로 로그인한다.
+3. **앱의 계정 메뉴에서 초대받은 네트워크로 바꾼다.** 로그인하면 본인 개인 네트워크로 들어가는 경우가 많다. 목록에 없으면 같은 계정으로 다시 로그인해 네트워크를 고른다.
+4. 앱의 Devices 탭에 `ject-dev`, `ject-prod-app`, `ject-prod-data`가 보이면 된 것이다.
+5. `ssh <아이디>@ject-dev`(나머지 두 대도 같음). 처음 접속 때 나오는 SHA256 값이 위 표와 같은지 본다.
+
 ## 팀원이 보낼 것
 
 1. SSH 공개키 한 줄 (`~/.ssh/id_ed25519.pub` 내용). 개인키는 절대 안 받는다.
