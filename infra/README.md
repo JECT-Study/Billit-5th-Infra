@@ -1,9 +1,8 @@
 # JECT 인프라 실행 정의
 
-설계 원본은 [`docs/인프라-설계.md`](../docs/인프라-설계.md), 이번 실행 범위는 [`docs/다음세션-인프라-구축.md`](../docs/다음세션-인프라-구축.md).
-이 폴더는 실제 구축에 쓰는 코드다. **무엇이 실제로 적용·검증됐는지는 `docs/인프라-설계.md`의 "구축 결과" 절**을 본다.
-모니터링·알림(Prometheus·Loki·Grafana·Alloy·Node Exporter·OCI Monitoring 알람·Notifications)은 2026-10-15 밤에 추가했다(아래 「모니터링」).
-OCI Health Checks는 무료 한도가 없어 쓰지 않는다(공인 주소 시험으로 대신). OTel·Tempo는 범위 밖이다.
+Trip Sheet(JECT 5기 3팀) 서버를 만들고 운영하는 코드다. 2026-10-15에 이 코드로 OCI에 서버 3대를 만들고 배포·백업·복원·모니터링·알림까지 실제로 확인했다.
+지금 서버에서 도는 앱은 배포 경로 확인용 스모크 앱이고, 실제 앱은 앱 저장소(`JECT-Study/Trip-Sheet-5th-Server`)에 CD를 붙인 뒤 올린다.
+OCI Health Checks는 무료 구간이 없어 쓰지 않는다(개발 VM이 공인 주소를 1분마다 시험). OTel·Tempo는 범위 밖이다.
 
 ## 구성
 
@@ -34,11 +33,13 @@ OCI Health Checks는 무료 한도가 없어 쓰지 않는다(공인 주소 시�
 
 ## 서버 배치
 
-| VM | 서브넷 | 실행 | 외부에서 열린 포트 |
-| --- | --- | --- | --- |
-| `ject-prod-app` | 공개(예약 공인 IP) | `ject-edge`(Nginx·Certbot), `ject-prod`(be, fe) | 80, 443 |
-| `ject-prod-data` | 사설 | `ject-prod-data`(PostgreSQL, Redis), 백업 타이머 | 없음. 5432·6379는 운영 앱 NSG에서만 |
-| `ject-dev-obs` | 사설 | `ject-dev-gateway`(Nginx :8080), `ject-dev`(be, fe), `ject-dev-data` | 없음. 8080은 운영 앱 NSG에서만 |
+| VM(OCI 이름) | 접속 이름(Tailscale) | 서브넷 | 실행(Compose 프로젝트) | 외부에서 열린 포트 |
+| --- | --- | --- | --- | --- |
+| `ject-prod-app` | `ject-prod-app` | 공개(예약 공인 IP) | `ject-edge`(Nginx·Certbot), `ject-prod`(be, fe) | 80, 443 |
+| `ject-prod-data` | `ject-prod-data` | 사설 | `ject-prod-data`(PostgreSQL, Redis), 백업 타이머 | 없음. 5432·6379는 운영 앱 NSG에서만 |
+| `ject-dev-obs` | `ject-dev` | 사설 | `ject-dev-gateway`(Nginx :8080), `ject-dev`(be, fe), `ject-dev-data`, `ject-obs`(모니터링) | 없음. 8080은 운영 앱 NSG에서만 |
+
+모든 VM에 수집기 `ject-agent`(Node Exporter·Alloy)가 돈다. 서버 도구(`ject-deploy`, `ject-user` 등)는 `/opt/ject/bin`에 있고 `/usr/local/sbin`에 링크돼 있어 `sudo ject-deploy status prod`처럼 쓴다.
 
 SSH 22는 NSG에서 Bastion 엔드포인트 /32만 허용한다(인터넷에 열지 않음). 사설 VM의 아웃바운드는 NAT, Object Storage는 Service Gateway.
 사람은 **Tailscale**로 들어간다(2026-10-16부터, `scripts/install-tailscale.sh`, 서버는 `tag:ject`, 팀원은 tcp/22만 — `access/README.md`).
@@ -49,7 +50,7 @@ sshd는 키 로그인만, `AllowGroups ject-admins deploy`, `MaxAuthTries 3`.
 ## 구축 순서 (요약)
 
 1. `oci/`: `terraform.tfvars`(저장소 제외)에 `tenancy_ocid`, `admin_ssh_public_key` → `tofu plan` → 확인 후 `tofu apply`.
-2. 각 VM: `infra/`를 `/tmp/ject-infra`로 복사 → `sudo bash bootstrap-host.sh <role>` → `sudo bash install-role.sh <role>`.
+2. 각 VM: `infra/`를 `/tmp/ject-infra`로 복사 → `sudo bash bootstrap-host.sh <role>` → `sudo bash install-role.sh <role> <GHCR 소유자>`(지금은 `ghdtjdwn`, 앱 저장소로 옮기면 `ject-study`).
 3. 데이터 VM: `setup-secrets.sh prod-data` → `/srv/ject/data.env`에 `DATA_BIND_IP=<사설IP>` → `docker compose -p ject-prod-data -f /opt/ject/compose/prod-data.yaml --env-file /srv/ject/data.env up -d --wait`.
 4. 앱 VM: 데이터 VM의 앱 DB·Redis 비밀값을 표준입력으로 `setup-secrets.sh prod-app-env <데이터 사설IP>`에 전달(화면 출력 없음) → `render-nginx.sh edge` → `ject-edge` 기동 → `ject-deploy deploy prod be <image@digest>`.
 5. 개발 VM: `setup-secrets.sh dev`, `dev-app-env` → `ject-dev-data`, `ject-dev-gateway` 기동 → `ject-deploy deploy dev be ...`. 운영 Nginx의 `DEV_UPSTREAM=<개발 사설IP>:8080`.
@@ -73,7 +74,7 @@ sshd는 키 로그인만, `AllowGroups ject-admins deploy`, `MaxAuthTries 3`.
   Tailscale이 안 될 때만 `JECT_SSH_ARGS="-N -L 3000:127.0.0.1:3000" OCI_PROFILE=JECT bash access/ject-ssh.sh seongju dev`(Bastion).
   관리자 비밀번호: 개발 VM `sudo cat /srv/ject/secrets/grafana_admin_password`(사용자 `admin`). 팀원 계정은 사람마다 따로 만든다.
 - 대시보드: 「JECT 개요」(서버·백업·공인 주소·인증서·관측 도구), 「JECT 앱」(HTTP·JVM·Hikari), 「JECT 로그」.
-  규칙·대시보드는 `observability/grafana/generate.py`를 고치고 다시 생성한 뒤 `install-role.sh dev`로 반영한다(Grafana 재시작 필요).
+  규칙·대시보드는 `observability/grafana/generate.py`를 고치고 다시 생성한 뒤 `install-role.sh dev <GHCR 소유자>`로 반영한다(Grafana 재시작 필요).
 - 알림 규칙 15개: 서버 지표 끊김·디스크 80/90%·메모리 15%·CPU 85%, 백업 실패·26시간 성공 없음·복원 시험 실패, 공인 주소 실패·인증서 14일,
   앱 지표 끊김·5xx 5%·p95 1초·DB 커넥션 대기·운영 오류 로그. OCI 알람: VM 응답 없음(5분)·메모리 90%(10분).
 - 설치 순서(개발 VM): `setup-secrets.sh obs` → `PROBE_PROD_URL=… PROBE_DEV_URL=… setup-secrets.sh obs-env dev dev <개발 IP>` →

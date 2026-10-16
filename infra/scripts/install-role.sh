@@ -95,4 +95,7 @@ true
 
 # 배포 허용 이미지: ghcr.io/<owner>/ject- 로 시작하는 것만
 [ -f /etc/ject/deploy.conf ] || printf 'ALLOWED_IMAGE_PREFIX=ghcr.io/%s/ject-\nMIN_FREE_PCT=15\nWAIT_TIMEOUT=180\nKEEP_IMAGES=3\n' "$GHCR_OWNER" > /etc/ject/deploy.conf
+
+# sudo의 secure_path에 /opt/ject/bin이 없어서, `sudo ject-deploy`처럼 이름만 쳐도 되게 링크를 둔다
+for f in /opt/ject/bin/*; do ln -sfn "$f" "/usr/local/sbin/${f##*/}"; done
 echo "installed role=$ROLE"

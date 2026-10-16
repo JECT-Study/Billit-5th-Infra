@@ -24,18 +24,18 @@
 1. SSH 공개키 한 줄 (`~/.ssh/id_ed25519.pub` 내용). 개인키는 절대 안 받는다.
 2. Tailscale 초대받을 이메일 (구글, 마이크로소프트, 깃허브, 애플 계정 중 하나).
 
-## 성주가 할 일 (받은 사람만)
+## 인프라 담당(성주)이 할 일 (받은 사람만)
 
-1. 공개키를 `.local/ject-access/<username>.pub`에 저장, `team.yaml`에 적는다. username: sanghyuk / junwon / dana / minseo
-2. 서버 3대에서 계정 생성
+1. 공개키를 `.local/ject-access/<username>.pub`에 저장하고 `team.yaml`의 상태를 고친다(이메일은 파일에 적지 않는다). username: sanghyuk / junwon / dana / minseo
+2. 서버 3대에서 계정 생성(공개키는 표준입력으로 넘긴다)
    ```sh
-   scp .local/ject-access/<username>.pub seongju@ject-dev:/tmp/
-   ssh seongju@ject-dev 'sudo ject-user add <username> /tmp/<username>.pub "<이름>" && rm /tmp/<username>.pub'
-   # ject-prod-app, ject-prod-data도 같이
+   for h in ject-dev ject-prod-app ject-prod-data; do
+     ssh seongju@$h 'f=$(mktemp); cat > "$f"; sudo ject-user add <username> "$f" "<이름>"; rm -f "$f"' < .local/ject-access/<username>.pub
+   done
    ```
-3. Tailscale 콘솔 → Users → Invite external users → 이메일 입력. 무료 Personal은 6명까지(성주 포함).
+3. Tailscale 콘솔 → Users → Invite users → 이메일 입력. 무료 Personal은 6명까지(성주 포함).
 4. 본인이 `ssh <username>@ject-dev` 되는지 확인받기.
-5. 나갈 때: `ject-user lock <username>` 3대 + Tailscale 콘솔에서 사용자 제거.
+5. 나갈 때: `sudo ject-user lock <username>` 3대 + Tailscale 콘솔에서 사용자 제거.
 
 ## 비상용: Bastion (Tailscale이 안 될 때)
 
@@ -45,11 +45,12 @@ A1(ARM) + Ubuntu는 Bastion 관리형 SSH가 안 돼서 포트 포워딩 세션�
 OCI_PROFILE=JECT infra/access/ject-ssh.sh <username> <prod-app|prod-data|dev>
 ```
 
-세션은 3시간, Bastion 하나에 동시 세션 수 제한이 있다(오늘 한도에 걸린 적 있음).
+세션은 최대 3시간이고 Bastion 하나당 동시 세션 수 제한이 있다(공식 FAQ 기준 약 20개, 2026-10-16에 한도에 걸린 적 있음).
 팀원 OCI 계정은 지금 안 만든다. 필요해지면 `ject-developers` 그룹에 넣는다.
 
 ## 서버에서 지키기
 
 - DB, Redis, nginx는 `docker compose`로 직접 올리고 내리지 않는다. 배포는 CI 또는 `sudo ject-deploy`.
 - `/srv/ject/secrets` 안의 값을 출력, 복사, 커밋하지 않는다.
-- 운영 데이터 서버에서 뭔가 지우거나 복원하려면 먼저 성주와 얘기한다.
+- 운영 데이터 서버에서 뭔가 지우거나 복원하려면 먼저 인프라 담당(성주)과 얘기한다.
+- 서버 도구: `sudo ject-deploy status prod|dev`(배포 상태), `sudo cat /srv/ject/backup-status/last.json`(마지막 백업), `sudo docker ps`.

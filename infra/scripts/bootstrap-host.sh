@@ -110,7 +110,7 @@ case "$ROLE" in
   prod-app)  WHAT="운영 앱 서버. nginx(https)랑 운영 BE 컨테이너가 돌아요."
              HOW="상태: sudo ject-deploy status prod" ;;
   prod-data) WHAT="운영 DB 서버. PostgreSQL, Redis, 새벽 4시 백업."
-             HOW="백업 결과: cat /srv/ject/backup-status/last.json" ;;
+             HOW="백업 결과: sudo cat /srv/ject/backup-status/last.json" ;;
   dev)       WHAT="개발 서버. 개발 BE/DB랑 모니터링(Grafana, Prometheus, Loki)."
              HOW="상태: sudo ject-deploy status dev" ;;
 esac
@@ -120,7 +120,7 @@ cat > /etc/motd <<CONF
    - 배포는 CI가 해요. docker compose를 직접 올리고 내리지 마세요
    - /srv/ject/secrets 안은 열어 보거나 복사하지 마세요
    - $HOW
-   - 설정을 바꿔야 하거나 이상하면 성주에게 말해 주세요
+   - 설정을 바꿔야 하거나 이상하면 인프라 담당(성주)에게 말해 주세요
 
 CONF
 # 우분투 기본 안내 중 광고·업그레이드 권유는 끈다. 시스템 정보, 업데이트 수, 재부팅 필요 표시는 남긴다.

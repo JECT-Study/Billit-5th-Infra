@@ -1,5 +1,8 @@
 # ject-infra (검증용)
 
+**인프라 코드 원본은 팀 저장소 [`JECT-Study/Trip-Sheet-5th-Infra`](https://github.com/JECT-Study/Trip-Sheet-5th-Infra)다(2026-10-17부터).**
+이 저장소는 스모크 앱으로 배포 파이프라인을 시험하는 사본이라 `.github/workflows`와 `spring-sample`이 더 있다. `infra/`는 두 저장소에 같이 반영하고, CD를 앱 저장소로 옮기면 이 저장소는 보관(archive)한다.
+
 JECT 5기 3팀 인프라 코드와 배포 파이프라인 검증 저장소. `infra/smoke-app`은 실제 서비스가 아니라
 ARM64 빌드 → GHCR → OCI Bastion(포트 포워딩) → ject-deploy 배포·자동 복구·롤백 경로를 확인하기 위한 최소 이미지다.
 실제 앱 저장소가 생기면 `infra/github-workflows`의 워크플로를 그 저장소의 `.github/workflows`로 옮긴다.

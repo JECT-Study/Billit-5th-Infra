@@ -1,7 +1,7 @@
-# 앱 저장소에 둘 진입 워크플로 예시.
-#  - PR·push: 비밀값 없이 검사(gradle-check.yml: spotlessCheck · test · build, DB·Redis 서비스 컨테이너)
+# 앱 저장소에 둘 진입 워크플로 예시. 브랜치 이름과 운영 배포 방식(수동 실행 / 릴리스 태그)은 팀 결정 전 초안이다.
+#  - PR·push: 비밀값 없이 검사(gradle-check.yml: spotlessCheck · test · build, DB·Redis 서비스 컨테이너). 앱 저장소에서는 그 저장소의 CI로 바꾼다
 #  - develop push: ARM64 빌드 → GHCR → 개발 VM 자동 배포 → 커밋에 dev-verified 표시
-#  - 운영: workflow_dispatch로 개발에서 검증된 digest와 그 커밋을 지정. production 환경 승인 후 배포. 롤백은 action=rollback
+#  - 운영: workflow_dispatch로 개발에서 검증된 digest와 그 커밋을 지정. production Environment에 승인자를 두면 승인 후 배포. 롤백은 action=rollback
 # 앱 이미지에는 HEALTHCHECK과 /readyz(DB·Redis 연결 확인)를 둔다(ject-deploy가 확인).
 name: ci-cd
 
