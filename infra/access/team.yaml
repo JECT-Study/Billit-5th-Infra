@@ -12,7 +12,7 @@ members:
     role: BE 리더
     public_key: .local/ject-access/sangcci.pub   # SHA256:SmYttvfMmvxIWiKhwnFmkdBRN75VeGGzqv3dIqYetvU
     server_account: 2026-10-17   # 처음 sanghyuk로 만들고 본인 요청으로 sangcci로 이름 변경(같은 날)
-    tailscale: 초대·사용자 승인(2026-10-17), 기기 접속 대기
+    tailscale: 접속 확인(2026-10-17)
   - username: junwon
     role: BE
     public_key: ""
