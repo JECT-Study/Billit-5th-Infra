@@ -5,8 +5,8 @@
 ## 어떻게 들어가나
 
 - 서버 22번은 인터넷에 안 열려 있다. **Tailscale**로 들어간다 (2026-10-16부터).
-  - 성주의 Tailscale 네트워크(tailnet)에 서버 3대가 `tag:ject`로 들어가 있고, 팀원은 초대받은 멤버.
-  - 접근 정책(콘솔 Access controls): 팀원은 `tag:ject`의 tcp/22만. 성주의 다른 기기, 개인 서버는 팀원에게 안 보인다.
+  - 인프라 담당의 Tailscale 네트워크(tailnet)에 서버 3대가 `tag:ject`로 들어가 있고, 팀원은 초대받은 멤버.
+  - 접근 정책(콘솔 Access controls): 팀원은 `tag:ject`의 tcp/22만. 담당자의 다른 기기는 팀원에게 안 보인다.
   - 서버 이름: `ject-prod-app`, `ject-prod-data`, `ject-dev`. MagicDNS라 이름으로 바로 ssh 된다.
 - 로그인은 서버에 등록한 **각자 공개키**로. 비밀번호 로그인 없음. 계정은 `ject-admins` 그룹(sudo).
 - CI(deploy 계정)는 그대로 OCI Bastion으로 들어온다. 사람은 Bastion을 비상용으로만 쓴다(아래).
@@ -24,7 +24,7 @@
 1. SSH 공개키 한 줄 (`~/.ssh/id_ed25519.pub` 내용). 개인키는 절대 안 받는다.
 2. Tailscale 초대받을 이메일 (구글, 마이크로소프트, 깃허브, 애플 계정 중 하나).
 
-## 인프라 담당(성주)이 할 일 (받은 사람만)
+## 인프라 담당이 할 일 (받은 사람만)
 
 1. 공개키를 `.local/ject-access/<username>.pub`에 저장하고 `team.yaml`의 상태를 고친다(이메일은 파일에 적지 않는다). username: sanghyuk / junwon / dana / minseo
 2. 서버 3대에서 계정 생성(공개키는 표준입력으로 넘긴다)
@@ -33,7 +33,7 @@
      ssh seongju@$h 'f=$(mktemp); cat > "$f"; sudo ject-user add <username> "$f" "<이름>"; rm -f "$f"' < .local/ject-access/<username>.pub
    done
    ```
-3. Tailscale 콘솔 → Users → Invite users → 이메일 입력. 무료 Personal은 6명까지(성주 포함).
+3. Tailscale 콘솔 → Users → Invite users → 이메일 입력. 무료 Personal은 6명까지(담당자 포함).
 4. 본인이 `ssh <username>@ject-dev` 되는지 확인받기.
 5. 나갈 때: `sudo ject-user lock <username>` 3대 + Tailscale 콘솔에서 사용자 제거.
 
@@ -52,5 +52,5 @@ OCI_PROFILE=JECT infra/access/ject-ssh.sh <username> <prod-app|prod-data|dev>
 
 - DB, Redis, nginx는 `docker compose`로 직접 올리고 내리지 않는다. 배포는 CI 또는 `sudo ject-deploy`.
 - `/srv/ject/secrets` 안의 값을 출력, 복사, 커밋하지 않는다.
-- 운영 데이터 서버에서 뭔가 지우거나 복원하려면 먼저 인프라 담당(성주)과 얘기한다.
+- 운영 데이터 서버에서 뭔가 지우거나 복원하려면 먼저 인프라 담당과 얘기한다.
 - 서버 도구: `sudo ject-deploy status prod|dev`(배포 상태), `sudo cat /srv/ject/backup-status/last.json`(마지막 백업), `sudo docker ps`.

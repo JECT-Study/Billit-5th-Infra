@@ -1,6 +1,6 @@
 # Trip-Sheet-5th-Infra
 
-Trip Sheet(JECT 5기 3팀) 서버 인프라 코드입니다. 담당: 홍성주
+Trip Sheet(JECT 5기 3팀) 서버 인프라 코드입니다.
 
 ## 구성
 

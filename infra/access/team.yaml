@@ -4,31 +4,26 @@
 # server_account: 서버 3대 계정 생성일(sudo, ject-admins). tailscale: 초대 상태. 이메일은 이 파일에 적지 않는다.
 members:
   - username: seongju
-    name: 홍성주
     role: BE (인프라 담당, 관리자)
     public_key: ~/.ssh/id_ed25519.pub
     server_account: 2026-10-15   # cloud-init
     tailscale: tailnet 소유자
   - username: sanghyuk
-    name: 박상혁
     role: BE 리더
     public_key: .local/ject-access/sanghyuk.pub   # SHA256:SmYttvfMmvxIWiKhwnFmkdBRN75VeGGzqv3dIqYetvU
     server_account: 2026-10-17
     tailscale: 초대 전
   - username: junwon
-    name: 김준원
     role: BE
     public_key: ""
     server_account: ""
     tailscale: ""
   - username: dana
-    name: 백단아
     role: FE 리더
     public_key: ""
     server_account: ""
     tailscale: ""
   - username: minseo
-    name: 성민서
     role: FE
     public_key: ""
     server_account: ""
