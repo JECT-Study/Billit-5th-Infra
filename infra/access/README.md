@@ -27,6 +27,33 @@
 4. 앱의 Devices 탭에 `ject-dev`, `ject-prod-app`, `ject-prod-data`가 보이면 된 것이다.
 5. `ssh <아이디>@ject-dev`(나머지 두 대도 같음). 처음 접속 때 나오는 SHA256 값이 위 표와 같은지 본다.
 
+## DB·Redis 접속
+
+서버 계정과 따로다. 개발과 운영은 계정 이름, 비밀번호, 데이터가 모두 다르다.
+
+| 환경 | 서버 | DB 이름 | 앱 계정 | 관리자 계정 |
+| --- | --- | --- | --- | --- |
+| 개발 | `ject-dev` | `ject_dev` | `ject_dev_app` | `ject_admin` |
+| 운영 | `ject-prod-data` | `ject` | `ject_app` | `ject_admin` |
+
+- 앱 계정은 자기 DB의 주인이다. 테이블을 만들고 고칠 수 있고(Flyway 포함), 다른 DB는 못 본다. 관리자 계정은 계정·DB 생성까지 전부 된다.
+- Redis는 계정 없이 비밀번호 하나다.
+- 비밀번호는 해당 서버에서 `sudo cat /srv/ject/secrets/<파일>`로 본다. 앱 계정 `pg_app_password`, 관리자 `pg_admin_password`, Redis `redis_password`.
+- 배포할 때는 서버가 앱에 접속값을 넣어 준다(`/srv/ject/secrets/dev-be.env`, `prod-be.env`). yml이나 코드에 비밀번호를 적지 않는다.
+
+노트북에서 붙기: DB·Redis 포트는 인터넷과 Tailscale 어디에도 안 열려 있어서, SSH로 서버를 거쳐 노트북 포트로 넘긴다. 이 명령을 띄운 터미널을 닫으면 끊긴다.
+
+```sh
+# 개발: 노트북 25432 → 개발 DB, 26379 → 개발 Redis
+ssh -N -L 25432:127.0.0.1:5432 -L 26379:127.0.0.1:6379 <아이디>@ject-dev
+
+# 운영: 데이터 서버의 사설 IP로 넘긴다
+IP=$(ssh <아이디>@ject-prod-data '. /srv/ject/data.env; echo $DATA_BIND_IP')
+ssh -N -L 35432:$IP:5432 -L 36379:$IP:6379 <아이디>@ject-prod-data
+```
+
+DB 툴(DBeaver, DataGrip 등)에는 호스트 `127.0.0.1`, 포트 `25432`(개발) 또는 `35432`(운영)와 위의 DB 이름·계정·비밀번호를 넣는다. Redis 툴은 `127.0.0.1:26379`(개발) 또는 `36379`(운영)에 비밀번호만 넣는다. 로컬 compose가 15432·16379를 쓰므로 겹치지 않게 골랐다.
+
 ## 팀원이 보낼 것
 
 1. SSH 공개키 한 줄 (`~/.ssh/id_ed25519.pub` 내용). 개인키는 절대 안 받는다.
@@ -59,6 +86,7 @@ OCI_PROFILE=JECT infra/access/ject-ssh.sh <username> <prod-app|prod-data|dev>
 ## 서버에서 지키기
 
 - DB, Redis, nginx는 `docker compose`로 직접 올리고 내리지 않는다. 배포는 CI 또는 `sudo ject-deploy`.
-- `/srv/ject/secrets` 안의 값을 출력, 복사, 커밋하지 않는다.
+- `/srv/ject/secrets` 안의 값은 본인 DB 툴에 넣을 때만 본다. 채팅, 문서, 커밋에 붙여 넣지 않는다.
+- 운영 DB는 실제 사용자 데이터다. 데이터를 고치거나 지우는 쿼리는 먼저 팀에 알린다.
 - 운영 데이터 서버에서 뭔가 지우거나 복원하려면 먼저 인프라 담당과 얘기한다.
 - 서버 도구: `sudo ject-deploy status prod|dev`(배포 상태), `sudo cat /srv/ject/backup-status/last.json`(마지막 백업), `sudo docker ps`.

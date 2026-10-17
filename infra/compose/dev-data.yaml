@@ -1,5 +1,5 @@
 # 개발 VM (ject-dev-obs)의 개발 전용 PostgreSQL·Redis. 운영과 계정·비밀값·데이터가 분리된다.
-# 호스트 포트를 열지 않는다(같은 VM의 ject-dev-net 안에서만 접근).
+# 포트는 VM 자신(127.0.0.1)에만 연다. 앱은 ject-dev-net으로, 팀원은 SSH 터널로 접근한다(infra/access/README.md).
 name: ject-dev-data
 
 x-logging: &logging
@@ -25,6 +25,8 @@ services:
     volumes:
       - /srv/ject/dev-data/postgres:/var/lib/postgresql/data
       - ./initdb:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "127.0.0.1:5432:5432"
     networks: [ject-dev-net]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ject_admin -d postgres -h 127.0.0.1"]
@@ -42,6 +44,8 @@ services:
     secrets: [redis_conf, redis_password]
     volumes:
       - /srv/ject/dev-data/redis:/data
+    ports:
+      - "127.0.0.1:6379:6379"
     networks: [ject-dev-net]
     healthcheck:
       test: ["CMD-SHELL", "REDISCLI_AUTH=\"$$(cat /run/secrets/redis_password)\" redis-cli ping | grep -q PONG"]
