@@ -14,6 +14,7 @@ CONF=/etc/ject/deploy.conf
 ALLOWED_IMAGE_PREFIX="${ALLOWED_IMAGE_PREFIX:-ghcr.io/}"
 MIN_FREE_PCT="${MIN_FREE_PCT:-15}"
 WAIT_TIMEOUT="${WAIT_TIMEOUT:-180}"
+DEPLOY_LOCK_TIMEOUT="${DEPLOY_LOCK_TIMEOUT:-600}"
 KEEP_IMAGES="${KEEP_IMAGES:-3}"
 
 die() { echo "ject-deploy: $*" >&2; exit 1; }
@@ -106,7 +107,8 @@ esac
 
 SVC="${3:-}"; VAR="$(svc_var "$SVC")"
 exec 9>"/run/lock/ject-deploy-$ENVN.lock"
-flock -n 9 || die "$ENVN 환경에서 다른 배포가 진행 중이다 (동시 배포 금지)"
+[[ "$DEPLOY_LOCK_TIMEOUT" =~ ^[0-9]+$ ]] || die "DEPLOY_LOCK_TIMEOUT은 0 이상의 정수여야 한다"
+flock -w "$DEPLOY_LOCK_TIMEOUT" 9 || die "$ENVN 환경의 다른 배포를 ${DEPLOY_LOCK_TIMEOUT}초 기다렸지만 끝나지 않았다"
 
 if [ "$CMD" = deploy ]; then
   NEW="${4:-}"; ACTOR="${5:-${SUDO_USER:-root}}"; REG_USER="${6:-}"

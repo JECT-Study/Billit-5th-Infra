@@ -129,7 +129,7 @@ EOF
       echo '    location / { return 301 https://$host$request_uri; }'
     else
       # 도메인·인증서 준비 전: IP로 운영 앱 동작을 확인할 수 있게 HTTP로 프록시한다.
-      app_locations "be:8080" ""
+      app_locations "be:8080" "${PROD_FE_UPSTREAM:-}"
     fi
     echo "}"
     if [ "$have_cert" = 1 ]; then

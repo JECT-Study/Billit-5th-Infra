@@ -18,6 +18,7 @@ services:
       - /srv/ject/secrets/prod-be.env
     environment:
       APP_ENV: prod
+      SPRING_PROFILES_ACTIVE: prod
       PORT: "8080"
       TZ: Asia/Seoul
       # Spring Boot 앱이 들어오면 JAVA_TOOL_OPTIONS로 heap 상한을 둔다(설계: 최대 1,024MiB부터).

@@ -34,7 +34,7 @@ jobs:
     runs-on: ubuntu-24.04
     environment: ${{ inputs.environment == 'prod' && 'production' || 'development' }}
     concurrency:
-      group: ject-deploy-${{ inputs.environment }}
+      group: ject-deploy-${{ inputs.environment }}-${{ inputs.service }}
       cancel-in-progress: false
     env:
       ENVN: ${{ inputs.environment }}

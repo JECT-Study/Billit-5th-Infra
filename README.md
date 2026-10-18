@@ -12,6 +12,8 @@ Trip Sheet(JECT 5기 3팀) 서버 인프라 코드입니다.
 
 세 대 모두 OCI Ampere A1 1코어·6GB·50GB이고 무료 한도 안에서 운영합니다.
 
+공통 빌드·배포 워크플로는 이 저장소의 `.github/workflows/`에 두고 앱 저장소에서 호출합니다. 공개 전환·Actions 활성화·앱의 호출 연결 후 사용할 수 있으며, 공개 전환만으로 자동 배포되지는 않습니다.
+
 배포는 앱 저장소([Trip-Sheet-5th-Server](https://github.com/JECT-Study/Trip-Sheet-5th-Server))에서 시작합니다.
 GitHub Actions가 ARM64 이미지를 만들어 GHCR에 올리고, 개발 서버에는 자동으로, 운영 서버에는 개발에서 확인된 이미지만 수동으로 배포합니다.
 배포 뒤 상태 확인에 실패하면 이전 버전으로 자동 복구합니다.
@@ -27,7 +29,8 @@ GitHub Actions가 ARM64 이미지를 만들어 GHCR에 올리고, 개발 서버�
 | `infra/compose/` | 서버별 Docker Compose |
 | `infra/nginx/` | Nginx 기본 설정(서버별 설정은 `scripts/render-nginx.sh`가 만든다) |
 | `infra/observability/` | Prometheus·Loki·Alloy·Grafana 설정과 알림 규칙 |
-| `infra/github-workflows/` | 앱 저장소에 넣을 빌드·배포 워크플로(이 저장소에서는 실행되지 않음) |
+| `.github/workflows/` | 앱 저장소가 호출하는 공통 ARM64 빌드·서버 배포(직접 push로 실행되지 않음) |
+| `infra/github-workflows/` | 공통 워크플로 원본 사본·앱 진입 예시·연결 안내 |
 | `infra/access/` | 서버 접속 방법(Tailscale)과 팀원 계정 |
 | `infra/tests/` | 로컬 통합 시험 |
 

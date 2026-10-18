@@ -118,10 +118,17 @@ else ok "두 번째 롤백: 되돌릴 다른 이미지 없음으로 거부"; fi
 check "관리 경로 우회 차단(/v3/api-docs.yaml)" bash -c "[ \$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1/v3/api-docs.yaml) = 404 ]"
 check "경로 매개변수 우회 차단(;)" bash -c "[ \$(curl -s -o /dev/null -w '%{http_code}' 'http://127.0.0.1/actuator;x/env') = 400 ]"
 check "DB 초기화 로그에 비밀번호 없음" bash -c "! docker logs ject-prod-data-postgres-1 2>&1 | grep -qF \"\$(cat /srv/ject/secrets/pg_app_password)\""
-( exec 9>/run/lock/ject-deploy-prod.lock; flock 9; sleep 8 ) &
+( exec 9>/run/lock/ject-deploy-prod.lock; flock 9; sleep 3 ) &
 sleep 1
-if /opt/ject/bin/ject-deploy deploy prod be "$V3" e2e 2>/dev/null; then bad "동시 배포가 허용됨"; else ok "동시 배포 차단"; fi
+if /opt/ject/bin/ject-deploy deploy prod be "$V3" e2e; then ok "다른 배포의 잠금 해제 후 배포 성공"; else bad "배포 대기 실패"; fi
 wait
+echo 'DEPLOY_LOCK_TIMEOUT=1' >> /etc/ject/deploy.conf
+( exec 9>/run/lock/ject-deploy-prod.lock; flock 9; sleep 3 ) &
+sleep 1
+if /opt/ject/bin/ject-deploy deploy prod be "$V1" e2e 2>/dev/null; then bad "잠금 대기 제한 무시"; else ok "잠금 대기 시간 초과 시 거부"; fi
+wait
+sed -i '/^DEPLOY_LOCK_TIMEOUT=/d' /etc/ject/deploy.conf
+check "잠금 시간 초과 시 현재 버전 유지" bash -c "curl -fsS http://127.0.0.1/version | grep -qx v3"
 if /opt/ject/bin/ject-deploy deploy prod be "$REG/ject/smoke:v3" e2e 2>/dev/null; then bad "digest 없는 참조 허용"; else ok "digest 없는 이미지 거부"; fi
 if /opt/ject/bin/ject-deploy deploy prod be "docker.io/library/nginx@sha256:$(printf '0%.0s' $(seq 64))" e2e 2>/dev/null; then bad "허용 외 레지스트리 허용"; else ok "허용 외 레지스트리 거부"; fi
 check "Nginx 재시작 없음(배포 중)" bash -c "[ \$(docker inspect -f '{{.RestartCount}}' ject-edge-nginx-1) = 0 ]"

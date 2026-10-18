@@ -28,7 +28,7 @@ jobs:
     if: github.event_name == 'push'
     needs: check
     permissions: { contents: read, packages: write }
-    uses: ./.github/workflows/build-arm64.yml
+    uses: JECT-Study/Trip-Sheet-5th-Infra/.github/workflows/build-arm64.yml@main
     with:
       image_name: ject-be
 
@@ -36,7 +36,7 @@ jobs:
     if: github.event_name == 'push'
     needs: build
     permissions: { contents: read, packages: read, statuses: write }
-    uses: ./.github/workflows/deploy-via-bastion.yml
+    uses: JECT-Study/Trip-Sheet-5th-Infra/.github/workflows/deploy-via-bastion.yml@main
     with:
       environment: dev
       image: ${{ needs.build.outputs.image }}
@@ -46,7 +46,7 @@ jobs:
   deploy-manual:
     if: github.event_name == 'workflow_dispatch'
     permissions: { contents: read, packages: read, statuses: write }
-    uses: ./.github/workflows/deploy-via-bastion.yml
+    uses: JECT-Study/Trip-Sheet-5th-Infra/.github/workflows/deploy-via-bastion.yml@main
     with:
       environment: ${{ inputs.environment }}
       action: ${{ inputs.action }}
