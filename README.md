@@ -1,46 +1,50 @@
-# Trip-Sheet-5th-Infra
+# Billit-5th-Infra
 
-Trip Sheet(JECT 5기 3팀) 서버 인프라 코드입니다.
+Billit의 OCI 서버 구성과 공통 배포 워크플로를 관리합니다.
 
-## 구성
+## 서버 구성
 
-| 서버 | 하는 일 |
+| 서버 | 역할 |
 | --- | --- |
-| 운영 앱 서버 (`ject-prod-app`) | Nginx(HTTPS), 운영 BE |
-| 운영 DB 서버 (`ject-prod-data`) | PostgreSQL 17, Redis 7.4, 매일 새벽 4시 백업 |
-| 개발 + 모니터링 서버 (`ject-dev`) | 개발 BE·DB, Prometheus·Loki·Grafana, 장애 알림 |
+| 운영 앱 (`ject-prod-app`) | Nginx, 백엔드, 웹 배포 환경 |
+| 운영 데이터 (`ject-prod-data`) | PostgreSQL 17, Redis 7.4, DB 백업 |
+| 개발 (`ject-dev`) | 개발 앱·DB, Prometheus·Loki·Grafana |
 
-세 대 모두 OCI Ampere A1 1코어·6GB·50GB이고 무료 한도 안에서 운영합니다.
+서버는 각각 OCI Ampere A1 1 OCPU, 메모리 6GB, 디스크 50GB를 사용합니다.
+현재 배포 확인용 앱을 실행 중이며, 실제 BE·FE 앱 연결은 준비 중입니다.
 
-공통 빌드·배포 워크플로는 이 저장소의 `.github/workflows/`에 두고 앱 저장소에서 호출합니다. 저장소 공개·Actions 활성화는 완료됐으며, 실제 앱 저장소의 호출 연결은 별도입니다. 이 저장소에 push하는 것만으로 앱이 배포되지는 않습니다.
+## 배포
 
-배포는 앱 저장소([Trip-Sheet-5th-Server](https://github.com/JECT-Study/Trip-Sheet-5th-Server))에서 시작합니다.
-GitHub Actions가 ARM64 이미지를 만들어 GHCR에 올리고, 개발 서버에는 자동으로, 운영 서버에는 개발에서 확인된 이미지만 수동으로 배포합니다.
-배포 뒤 상태 확인에 실패하면 이전 버전으로 자동 복구합니다.
+앱 저장소에서 검사 후 공통 워크플로를 호출합니다.
 
-지금 서버에는 배포 경로 확인용 스모크 앱이 떠 있습니다. 앱 저장소에 CD를 붙이면 실제 앱으로 바뀝니다.
+1. ARM64 이미지를 빌드해 GHCR에 저장합니다.
+2. 개발 서버에 배포하고 상태를 확인합니다.
+3. 개발에서 확인한 이미지를 운영 서버에 수동 배포합니다.
 
-## 폴더
+배포 후 상태 검사에 실패하면 이전 이미지로 복구합니다. 이 저장소의 워크플로는 `workflow_call` 전용입니다.
+연결 방법과 필요한 설정은 [배포 가이드](infra/github-workflows/README.md)를 참고하세요.
+
+## 디렉터리
 
 | 경로 | 내용 |
 | --- | --- |
-| `infra/oci/` | OCI 자원(OpenTofu): 네트워크, 서버, Bastion, 버킷, 권한, 알람 |
-| `infra/scripts/` | 서버 설치, 배포(`ject-deploy`), 백업·복원 시험, 인증서, 계정 관리 |
-| `infra/compose/` | 서버별 Docker Compose |
-| `infra/nginx/` | Nginx 기본 설정(서버별 설정은 `scripts/render-nginx.sh`가 만든다) |
-| `infra/observability/` | Prometheus·Loki·Alloy·Grafana 설정과 알림 규칙 |
-| `.github/workflows/` | 앱 저장소가 호출하는 공통 ARM64 빌드·서버 배포(직접 push로 실행되지 않음) |
-| `infra/github-workflows/` | 공통 워크플로 원본 사본·앱 진입 예시·연결 안내 |
-| `infra/access/` | 서버 접속 방법(Tailscale)과 팀원 계정 |
-| `infra/tests/` | 로컬 통합 시험 |
+| `infra/oci/` | OpenTofu 네트워크·서버·스토리지·권한 설정 |
+| `infra/scripts/` | 서버 설치, 배포, 백업·복원, 인증서 관리 |
+| `infra/compose/` | 서버별 Docker Compose 설정 |
+| `infra/nginx/` | Nginx 기본 설정 |
+| `infra/observability/` | 지표·로그 수집, 대시보드, 알림 |
+| `.github/workflows/` | 공통 빌드·배포 워크플로 |
+| `infra/github-workflows/` | 워크플로 사본과 앱 저장소 호출 예시 |
+| `infra/access/` | SSH 접속과 계정 관리 |
+| `infra/tests/` | 배포·백업·모니터링 통합 시험 |
 
-운영 방법은 [`infra/README.md`](infra/README.md), 접속은 [`infra/access/README.md`](infra/access/README.md)에 있습니다.
+## 운영 문서
 
-## 서버 접속
+- [서버 구성과 운영](infra/README.md)
+- [서버·DB 접속](infra/access/README.md)
+- [앱 배포 연결](infra/github-workflows/README.md)
+- [백엔드 저장소](https://github.com/JECT-Study/Billit-5th-Server)
+- [프론트엔드 저장소](https://github.com/JECT-Study/Billit-5th-Client)
 
-필요한 사람만 Tailscale로 접속합니다. SSH 공개키와 Tailscale 초대받을 이메일을 인프라 담당에게 보내 주세요.
-접속하지 않아도 개발·배포에는 지장 없습니다.
-
-## 저장소에 넣지 않는 것
-
-비밀값, IP, OCID, OpenTofu 상태 파일은 넣지 않습니다. 비밀값은 서버 안에서 만들고, CI에 필요한 값은 GitHub Environment에만 둡니다.
+서버 접속은 Tailscale과 개인 SSH 키를 사용합니다. 계정이 필요하면 인프라 담당에게 공개키와 초대받을 이메일을 전달하세요.
+비밀값과 OpenTofu 상태 파일은 저장소에 포함하지 않습니다.

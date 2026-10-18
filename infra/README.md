@@ -1,8 +1,7 @@
-# JECT 인프라 실행 정의
+# 인프라 운영
 
-Trip Sheet(JECT 5기 3팀) 서버를 만들고 운영하는 코드다. 2026-10-15에 이 코드로 OCI에 서버 3대를 만들고 배포·백업·복원·모니터링·알림까지 실제로 확인했다.
-지금 서버에서 도는 앱은 배포 경로 확인용 스모크 앱이고, 실제 앱은 앱 저장소(`JECT-Study/Trip-Sheet-5th-Server`)에 CD를 붙인 뒤 올린다.
-OCI Health Checks는 무료 구간이 없어 쓰지 않는다(개발 VM이 공인 주소를 1분마다 시험). OTel·Tempo는 범위 밖이다.
+Billit 서버의 구성, 설치 절차, 모니터링 설정을 정리한다.
+실제 앱 배포 연결은 준비 중이며, 현재는 배포 확인용 앱을 실행한다.
 
 ## 구성
 
@@ -13,7 +12,7 @@ OCI Health Checks는 무료 구간이 없어 쓰지 않는다(개발 VM이 공�
 | `scripts/bootstrap-host.sh` | Docker Engine·Compose, 로그 순환(10m×3), journald 제한, 무인 보안 업데이트(자동 재부팅 없음), 디렉터리, `deploy` 계정, SSH 비밀번호 금지 |
 | `scripts/install-role.sh` | 역할별 스크립트·Compose·systemd 설치 |
 | `scripts/setup-secrets.sh` | 서버 안에서 비밀값 생성(출력 안 함, 덮어쓰지 않음) |
-| `scripts/ject-deploy` | 앱 배포·롤백·상태: flock 동시 배포 금지, digest 고정, 허용 레지스트리, 디스크 확인, healthcheck+readiness+Nginx 경유 확인, 실패 시 이전 이미지 자동 복구, 이력 기록 |
+| `scripts/ject-deploy` | 앱 배포·롤백·상태: flock으로 환경별 순차 배포(최대 600초 대기), digest 고정, 허용 레지스트리, 디스크 확인, healthcheck+readiness+Nginx 경유 확인, 실패 시 이전 이미지 자동 복구, 이력 기록 |
 | `scripts/ject-pg-backup` | 운영 DB 일일 백업(04:00 KST) → `ject-db-backups` 버킷, 체크섬·행 수 MANIFEST, 성공 7개 보존, 실패 시 기존 보존 |
 | `scripts/ject-pg-restore-test` | 버킷 백업을 격리 임시 컨테이너(--network none)에 복원해 행 수 비교(매월 1일) |
 | `scripts/ject-cert` | Let's Encrypt 발급·갱신(webroot), 갱신 시에만 Nginx 재적용 |
@@ -26,8 +25,8 @@ OCI Health Checks는 무료 구간이 없어 쓰지 않는다(개발 VM이 공�
 | `oci/monitoring.tf` | 알림 주제 `ject-alerts`·이메일 구독, VM 응답 없음(3)·메모리 90% 알람, 개발 VM의 발행 권한 |
 | `observability/` | Prometheus·Loki·Alloy(공통·앱·관측) 설정, obs-gateway(쓰기 전용), 알림 중계기, Grafana 프로비저닝(`grafana/generate.py`로 규칙·대시보드 생성) |
 | `compose/agent.yaml`, `compose/obs.yaml` | 수집기(3대: Node Exporter·Alloy), 관측 스택(개발 VM: Prometheus·Loki·Grafana·obs-gateway) |
-| `smoke-app/` | **실제 JECT 앱이 아님.** 배포 경로 검증용 최소 이미지(/healthz, /readyz=DB·Redis 연결, /version) |
-| `github-workflows/` | 앱 저장소의 `.github/workflows/`에 넣을 ARM64 빌드·GHCR·Bastion(포트 포워딩) 배포 워크플로. 옮기는 방법·권한은 `github-workflows/README.md` |
+| `smoke-app/` | 배포 경로 확인용 이미지(/healthz, /readyz=DB·Redis 연결, /version) |
+| `github-workflows/` | 공통 빌드·배포 워크플로 사본과 앱 호출 예시. 연결 방법은 `github-workflows/README.md` |
 | `access/` | 팀원 계정·접속 방법(Tailscale, 비상용 Bastion 스크립트) |
 | `tests/` | 로컬 통합 시험(`local-e2e.sh` 배포·백업, `local-obs-e2e.sh` 모니터링·Swagger·Redis 정책)과 OCI CLI 대역 |
 
@@ -42,7 +41,7 @@ OCI Health Checks는 무료 구간이 없어 쓰지 않는다(개발 VM이 공�
 모든 VM에 수집기 `ject-agent`(Node Exporter·Alloy)가 돈다. 서버 도구(`ject-deploy`, `ject-user` 등)는 `/opt/ject/bin`에 있고 `/usr/local/sbin`에 링크돼 있어 `sudo ject-deploy status prod`처럼 쓴다.
 
 SSH 22는 NSG에서 Bastion 엔드포인트 /32만 허용한다(인터넷에 열지 않음). 사설 VM의 아웃바운드는 NAT, Object Storage는 Service Gateway.
-사람은 **Tailscale**로 들어간다(2026-10-16부터, `scripts/install-tailscale.sh`, 서버는 `tag:ject`, 팀원은 tcp/22만 — `access/README.md`).
+사람은 **Tailscale**로 들어간다(`scripts/install-tailscale.sh`, 서버는 `tag:ject`, 팀원은 tcp/22만 허용).
 Tailscale은 서버가 바깥으로 연결을 거는 방식이라 NSG에 추가로 열 포트가 없다.
 CI는 그대로 Bastion 포트 포워딩 세션(A1+Ubuntu는 관리형 SSH 세션이 안 됨). CI 사용자는 `target.resource.ocid` 조건으로 자기 VM 대상 세션만 만들 수 있고, 세션 조회·VNIC 조회 권한이 따로 필요하다(`oci/storage_iam.tf`).
 sshd는 키 로그인만, `AllowGroups ject-admins deploy`, `MaxAuthTries 3`.
@@ -50,13 +49,13 @@ sshd는 키 로그인만, `AllowGroups ject-admins deploy`, `MaxAuthTries 3`.
 ## 구축 순서 (요약)
 
 1. `oci/`: `terraform.tfvars`(저장소 제외)에 `tenancy_ocid`, `admin_ssh_public_key` → `tofu plan` → 확인 후 `tofu apply`.
-2. 각 VM: `infra/`를 `/tmp/ject-infra`로 복사 → `sudo bash bootstrap-host.sh <role>` → `sudo bash install-role.sh <role> <GHCR 소유자>`(지금은 `ghdtjdwn`, 앱 저장소로 옮기면 `ject-study`).
+2. 각 VM: `infra/`를 `/tmp/ject-infra`로 복사 → `sudo bash bootstrap-host.sh <role>` → `sudo bash install-role.sh <role> <GHCR 소유자>`(팀 이미지의 소유자는 `ject-study`).
 3. 데이터 VM: `setup-secrets.sh prod-data` → `/srv/ject/data.env`에 `DATA_BIND_IP=<사설IP>` → `docker compose -p ject-prod-data -f /opt/ject/compose/prod-data.yaml --env-file /srv/ject/data.env up -d --wait`.
 4. 앱 VM: 데이터 VM의 앱 DB·Redis 비밀값을 표준입력으로 `setup-secrets.sh prod-app-env <데이터 사설IP>`에 전달(화면 출력 없음) → `render-nginx.sh edge` → `ject-edge` 기동 → `ject-deploy deploy prod be <image@digest>`.
 5. 개발 VM: `setup-secrets.sh dev`, `dev-app-env` → `ject-dev-data`, `ject-dev-gateway` 기동 → `ject-deploy deploy dev be ...`. 운영 Nginx의 `DEV_UPSTREAM=<개발 사설IP>:8080`.
-5-1. CI: 환경별 배포 키 공개키를 `ject-deploy-key install <pub> <Bastion 사설 IP>`(운영 앱·개발 VM) → GitHub Environment 비밀값(`github-workflows/README.md`).
-6. 도메인이 생기면 `/srv/ject/app/edge.env`에 `PROD_DOMAIN`, `DEV_DOMAIN` → DNS A 레코드 → `ject-cert issue`.
-7. 백업: `systemctl start ject-pg-backup` → `ject-pg-restore-test latest` 성공 확인.
+6. CI: 환경별 배포 키 공개키를 `ject-deploy-key install <pub> <Bastion 사설 IP>`(운영 앱·개발 VM) → GitHub Environment 비밀값(`github-workflows/README.md`).
+7. 도메인이 생기면 `/srv/ject/app/edge.env`에 `PROD_DOMAIN`, `DEV_DOMAIN` → DNS A 레코드 → `ject-cert issue`.
+8. 백업: `systemctl start ject-pg-backup` → `ject-pg-restore-test latest` 성공 확인.
 
 ## 모니터링
 

@@ -1,10 +1,10 @@
-# JECT 서버 접속
+# 서버 접속
 
-대상: BE 3명, FE 2명. PM, 디자이너는 서버 계정이 없다.
+개발팀은 Tailscale과 개인 SSH 키로 서버에 접속한다.
 
-## 어떻게 들어가나
+## 접속 방식
 
-- 서버 22번은 인터넷에 안 열려 있다. **Tailscale**로 들어간다 (2026-10-16부터).
+- 서버 22번은 인터넷에 안 열려 있다. **Tailscale**로 들어간다.
   - 인프라 담당의 Tailscale 네트워크(tailnet)에 서버 3대가 `tag:ject`로 들어가 있고, 팀원은 초대받은 멤버.
   - 접근 정책(콘솔 Access controls): 팀원은 `tag:ject`의 tcp/22만. 담당자의 다른 기기는 팀원에게 안 보인다.
   - 서버 이름: `ject-prod-app`, `ject-prod-data`, `ject-dev`. MagicDNS라 이름으로 바로 ssh 된다.
@@ -59,16 +59,16 @@ DB 툴(DBeaver, DataGrip 등)에는 호스트 `127.0.0.1`, 포트 `25432`(개발
 1. SSH 공개키 한 줄 (`~/.ssh/id_ed25519.pub` 내용). 개인키는 절대 안 받는다.
 2. Tailscale 초대받을 이메일 (구글, 마이크로소프트, 깃허브, 애플 계정 중 하나).
 
-## 인프라 담당이 할 일 (받은 사람만)
+## 계정 관리
 
-1. 공개키를 `.local/ject-access/<username>.pub`에 저장하고 `team.yaml`의 상태를 고친다(이메일은 파일에 적지 않는다). username은 본인에게 묻는다(영문 소문자). 정해진 것: sangcci(BE 리더). 나머지 기본안 junwon / dana / minseo
+1. 공개키를 `.local/ject-access/<username>.pub`에 저장하고 `team.yaml`의 상태를 고친다(이메일은 파일에 적지 않는다). username은 팀원이 지정한 영문 소문자 아이디를 사용한다.
 2. 서버 3대에서 계정 생성(공개키는 표준입력으로 넘긴다)
    ```sh
    for h in ject-dev ject-prod-app ject-prod-data; do
      ssh seongju@$h 'f=$(mktemp); cat > "$f"; sudo ject-user add <username> "$f" "<이름>"; rm -f "$f"' < .local/ject-access/<username>.pub
    done
    ```
-3. Tailscale 콘솔 → Users → Invite users → 이메일 입력. 무료 Personal은 6명까지(담당자 포함).
+3. Tailscale 콘솔 → Users → Invite users → 이메일 입력.
 4. 본인이 `ssh <username>@ject-dev` 되는지 확인받기.
 5. 나갈 때: `sudo ject-user lock <username>` 3대 + Tailscale 콘솔에서 사용자 제거.
 
@@ -80,13 +80,13 @@ A1(ARM) + Ubuntu는 Bastion 관리형 SSH가 안 돼서 포트 포워딩 세션�
 OCI_PROFILE=JECT infra/access/ject-ssh.sh <username> <prod-app|prod-data|dev>
 ```
 
-세션은 최대 3시간이고 Bastion 하나당 동시 세션 수 제한이 있다(공식 FAQ 기준 약 20개, 2026-10-16에 한도에 걸린 적 있음).
+세션은 최대 3시간이며, 동시 세션 한도에 도달하면 기존 세션을 정리한 뒤 다시 연결한다.
 팀원 OCI 계정은 지금 안 만든다. 필요해지면 `ject-developers` 그룹에 넣는다.
 
 ## 서버에서 지키기
 
 - DB, Redis, nginx는 `docker compose`로 직접 올리고 내리지 않는다. 배포는 CI 또는 `sudo ject-deploy`.
 - `/srv/ject/secrets` 안의 값은 본인 DB 툴에 넣을 때만 본다. 채팅, 문서, 커밋에 붙여 넣지 않는다.
-- 운영 DB는 실제 사용자 데이터다. 데이터를 고치거나 지우는 쿼리는 먼저 팀에 알린다.
+- 운영 DB의 데이터는 신중하게 다룬다. 데이터를 고치거나 지우는 쿼리는 먼저 팀에 알린다.
 - 운영 데이터 서버에서 뭔가 지우거나 복원하려면 먼저 인프라 담당과 얘기한다.
 - 서버 도구: `sudo ject-deploy status prod|dev`(배포 상태), `sudo cat /srv/ject/backup-status/last.json`(마지막 백업), `sudo docker ps`.
