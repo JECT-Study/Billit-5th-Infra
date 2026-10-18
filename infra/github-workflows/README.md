@@ -5,7 +5,7 @@
 인프라 담당의 권한은 읽기뿐이다. CI는 BE 리더가 만들고, 인프라 담당은 PR이 올라오면 CD를 붙이면서 맞춘다(2026-10-16 분담).
 서버 코드와 공통 빌드·배포는 `JECT-Study/Trip-Sheet-5th-Infra`에서 관리한다. 앱 저장소에는 서비스별 검사, 공통 워크플로를 호출하는 진입 파일, Dockerfile을 둔다.
 
-공통 호출을 사용하려면 Infra 저장소 공개 전환, Actions 활성화, `.github/workflows/build-arm64.yml`·`deploy-via-bastion.yml` 반영이 필요하다. 현재 파일은 이 연결을 위한 준비이며 실제 앱 배포 완료를 뜻하지 않는다. 공개 앱 저장소는 비공개 Infra 워크플로를 직접 호출할 수 없다.
+Infra 저장소는 공개이며 Actions가 활성화되어 있다. `.github/workflows/build-arm64.yml`·`deploy-via-bastion.yml`은 다른 앱에서 호출할 때만 실행된다. 실제 BE·FE 앱 저장소의 호출 연결과 앱 배포는 별도 작업이다.
 
 ## 1. 앱 저장소에 맞출 것 (초기 코드 `18fcc8b` 기준)
 
@@ -40,7 +40,7 @@
 | `deploy-via-bastion.yml` | Infra의 `.github/workflows/deploy-via-bastion.yml` | `workflow_call`로만 실행하는 공통 배포·롤백 |
 | `ci-cd.yml` | 각 앱 저장소의 `.github/workflows/cd.yml` 등 | 호출 예시. `check`는 해당 앱의 검사로 연결 |
 
-`ci-cd.yml`의 `@main`은 예시다. 실제 연결할 때 검증한 Infra 커밋 SHA로 고정한다. 공통 코드를 고친 뒤 각 앱의 참조 SHA를 갱신해야 반영된다.
+`ci-cd.yml`은 공개된 공통 워크플로 커밋 SHA로 고정했다. 문법과 로컬 동작 검증을 마쳤으며 실제 앱의 GitHub Actions 호출 검증은 연결 시 수행한다. 공통 코드를 고친 뒤 각 앱의 참조 SHA를 갱신해야 반영된다.
 빌드 입력은 `context`, `dockerfile`, `image_name`, `extra_build_args`이며, FE 웹은 `image_name: ject-fe`, 배포 입력 `service: fe`를 사용한다. BE는 `ject-be`, `service: be`다.
 비밀값과 `development`·`production` 환경의 승인·변수는 **호출하는 앱 저장소**에 둔다. 공통 배포 호출에는 `secrets: inherit`와 필요한 `permissions`를 전달한다.
 
@@ -56,14 +56,14 @@ FE 저장소의 검사 작업이 성공한 뒤 공통 빌드를 호출한다. No
 build:
   needs: check
   permissions: { contents: read, packages: write }
-  uses: JECT-Study/Trip-Sheet-5th-Infra/.github/workflows/build-arm64.yml@main
+  uses: JECT-Study/Trip-Sheet-5th-Infra/.github/workflows/build-arm64.yml@2c4523f36c3f2c0c223b7a3e1af9aa2421607abe
   with:
     image_name: ject-fe
 
 deploy-dev:
   needs: build
   permissions: { contents: read, packages: read, statuses: write }
-  uses: JECT-Study/Trip-Sheet-5th-Infra/.github/workflows/deploy-via-bastion.yml@main
+  uses: JECT-Study/Trip-Sheet-5th-Infra/.github/workflows/deploy-via-bastion.yml@2c4523f36c3f2c0c223b7a3e1af9aa2421607abe
   with:
     environment: dev
     service: fe
@@ -72,7 +72,7 @@ deploy-dev:
   secrets: inherit
 ```
 
-위 조각은 FE 진입 워크플로의 `jobs` 아래에 넣는다. PR에서는 배포하지 않고, 배포 브랜치 push에서만 실행되도록 진입 파일에 조건을 둔다. 운영 수동 호출에도 `service: fe`를 반드시 전달한다. 이 예시의 `@main`도 실제 연결 시 검증한 커밋 SHA로 바꾼다.
+위 조각은 FE 진입 워크플로의 `jobs` 아래에 넣는다. PR에서는 배포하지 않고, 배포 브랜치 push에서만 실행되도록 진입 파일에 조건을 둔다. 운영 수동 호출에도 `service: fe`를 반드시 전달한다. 공통 코드 버전을 올릴 때 호출 SHA도 함께 갱신한다.
 
 ## 4. 서버 쪽 변경
 

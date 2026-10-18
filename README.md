@@ -12,7 +12,7 @@ Trip Sheet(JECT 5기 3팀) 서버 인프라 코드입니다.
 
 세 대 모두 OCI Ampere A1 1코어·6GB·50GB이고 무료 한도 안에서 운영합니다.
 
-공통 빌드·배포 워크플로는 이 저장소의 `.github/workflows/`에 두고 앱 저장소에서 호출합니다. 공개 전환·Actions 활성화·앱의 호출 연결 후 사용할 수 있으며, 공개 전환만으로 자동 배포되지는 않습니다.
+공통 빌드·배포 워크플로는 이 저장소의 `.github/workflows/`에 두고 앱 저장소에서 호출합니다. 저장소 공개·Actions 활성화는 완료됐으며, 실제 앱 저장소의 호출 연결은 별도입니다. 이 저장소에 push하는 것만으로 앱이 배포되지는 않습니다.
 
 배포는 앱 저장소([Trip-Sheet-5th-Server](https://github.com/JECT-Study/Trip-Sheet-5th-Server))에서 시작합니다.
 GitHub Actions가 ARM64 이미지를 만들어 GHCR에 올리고, 개발 서버에는 자동으로, 운영 서버에는 개발에서 확인된 이미지만 수동으로 배포합니다.
