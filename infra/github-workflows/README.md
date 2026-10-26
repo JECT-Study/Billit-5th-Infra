@@ -3,18 +3,23 @@
 앱 저장소는 검사 작업과 Dockerfile을 관리하고, 이 저장소의 공통 워크플로로 이미지를 빌드·배포한다.
 공통 워크플로는 다른 저장소에서 호출할 때만 실행된다. 실제 BE·FE 앱 연결은 준비 중이다.
 
-## 1. 앱 저장소에 맞출 것 (초기 코드 `18fcc8b` 기준)
+## 1. 앱 저장소에 맞출 것 (`Billit-5th-Server` develop `569d8a6`, 2026-10-26 기준)
 
-| 항목 | 지금 앱 저장소 | 배포에 필요한 것 |
+| 항목 | 지금 앱 저장소 | 배포에 필요한 것 / 상태 |
 | --- | --- | --- |
-| Dockerfile | 없음 | ARM64 이미지, `HEALTHCHECK`, 루트가 아닌 사용자(UID 65532), 포트 8080 |
-| 상태 확인 | 없음 | `GET /readyz`(DB 연결 확인, 200/503). `ject-deploy`와 Nginx가 본다. Redis는 앱이 쓰기 시작할 때 추가 |
-| 지표 | Actuator 없음 | 관리 포트 8081의 `/actuator/prometheus`. 없으면 「앱 지표 끊김」 알림이 계속 뜬다 |
-| 프로필 | `local`·`test`·`release`·`prod`(`dev` 없음, `SPRING_PROFILES_ACTIVE`로 고름) | Compose에 개발 `SPRING_PROFILES_ACTIVE=release`, 운영 `prod`를 정의했다. 서버 설정 반영 완료, 실제 앱 연결 필요 |
-| DB 접속값 | `DB_URL`·`DB_USERNAME`·`DB_PASSWORD`(기본값 없음) | `setup-secrets.sh`에 `DB_URL`·`DB_USERNAME`을 추가했고 `DB_PASSWORD`는 기존 값을 사용한다. 기존 서버 env 재생성은 별도 |
-| Redis | 의존성 없음 | 서버에는 준비돼 있다. 쓰기 시작할 때 연결 설정(`REDIS_HOST`·`REDIS_PORT`·`/run/secrets/redis_password`) |
-| CI | `.github/workflows/ci.yml`: PR과 `main` push. `spotlessCheck test` + 스키마 문서 검사, DB는 Testcontainers | `gradle-check.yml` 대신 앱의 CI를 사용한다. CD는 `develop` push에서 도는 것으로 짜 두었다(브랜치는 팀 결정 전). `ci.yml`을 CD 앞에 붙일지는 PR 때 BE 리더와 정한다 |
-| 개발 서버 자원 | — | 개발 BE는 `cpus: 0.30`, 메모리 1,024MiB(heap 50%). 실제 Spring 앱이 배포 대기 180초 안에 뜨는지 첫 배포 때 보고, 모자라면 `dev-app.yaml`을 올린다 |
+| Dockerfile | 없음 | ARM64 이미지, `HEALTHCHECK`(/healthz), 루트가 아닌 사용자(UID 65532), 포트 8080. **준비한 변경(아래)에 포함** |
+| 상태 확인 | 없음(Actuator 의존성 없음) | 앱 포트의 `/healthz`(생존)·`/readyz`(DB·Redis 연결, 200/503). `ject-deploy`와 Nginx가 `/readyz`를 본다. **준비한 변경에 포함** |
+| 지표 | 없음 | 관리 포트 8081의 `/actuator/prometheus`. 없으면 「앱 지표 끊김」 알림이 계속 뜬다. **준비한 변경에 포함** |
+| 프로필 | `local`·`dev`·`prod`(+`test`) | Compose를 개발 `SPRING_PROFILES_ACTIVE=dev`, 운영 `prod`로 맞췄다(10/26, 서버 반영 전) |
+| DB 접속값 | `DB_URL`·`DB_USERNAME`·`DB_PASSWORD`(기본값 없음) | `setup-secrets.sh`가 env 파일에 넣는다. 기존 서버 env 재생성은 반영 때 |
+| Redis | `REDIS_HOST`·`REDIS_PORT`·`REDIS_USERNAME`·`REDIS_PASSWORD`·`REDIS_SSL_ENABLED`(모두 기본값 없음) | `setup-secrets.sh`가 넣도록 고쳤다(사용자 `default`, SSL 끔, 10/26). 기존 서버 env 재생성은 반영 때 |
+| 파일 저장소 | `STORAGE_ENABLED`(기본 false)·`STORAGE_S3_*` | 접근 키를 만들기 전까지 끈다 |
+| API 문서 | 개발만 켬: `/swagger-ui.html`, `/api-docs/**`, `/scalar/**` | 개발 게이트웨이가 Basic 인증, 운영 Nginx는 막는다(10/26 경로 추가) |
+| **DB 마이그레이션** | `db/migration`이 비어 있는데 연습용 엔티티(`learning_stocks`·`learning_reservations`)가 있다 | `ddl-auto: validate`라 **개발·운영에서 앱이 시작되지 않는다.** 마이그레이션을 추가하거나 연습 모듈을 빼야 한다(BE) |
+| CI | `lint.yml`·`test.yml`(PR, `main` push) | CD는 준비한 `cd.yml`(develop push → 검사 → 빌드 → 개발 배포, 운영은 수동) |
+| 개발 서버 자원 | — | 개발 BE `cpus: 0.30`, 메모리 1,024MiB에서 실제 앱 기동 93초(10/26 로컬 측정, 배포 대기 180초 안) |
+
+준비한 변경: 인프라 담당이 만든 앱 저장소 브랜치 `infra/deploy-ready`(커밋 1개: `build.gradle.kts`·`application-dev/prod.yml`·`Dockerfile`·`.dockerignore`·`.github/workflows/cd.yml`). 로컬에서 ARM64 이미지 빌드, `/healthz`·`/readyz`(Redis 중지 시 503 → 복구 시 200)·8081 지표·정상 종료를 확인했다. 앱 저장소 쓰기 권한이 없어 BE 리더가 반영하거나 포크 PR로 올린다.
 
 ## 2. 필요한 권한 (조직 관리자·저장소 관리자에게 요청)
 
@@ -24,7 +29,7 @@
 | 조직의 GitHub Packages 생성 허용 | 조직 관리자 | `ghcr.io/ject-study/<이미지>` 푸시(GITHUB_TOKEN `packages: write`) |
 | Actions 허용 정책에 `docker/*` 액션 포함 | 조직 관리자 | `build-arm64.yml`이 `docker/setup-buildx-action`, `docker/login-action`, `docker/build-push-action`을 쓴다. 막혀 있으면 시작 단계에서 실패(startup_failure)한다 |
 | (권장) `production` Environment Required reviewers | 저장소 admin | 공개 저장소는 무료로 쓸 수 있다. 운영 배포 승인자 지정 |
-| `develop`·`main` 보호 규칙: PR 필수 + 필수 검사(`ci.yml`의 `verify`) 통과 | 저장소 admin | 2026-10-17 확인 시 규칙이 없어 CI가 실패해도 머지된다. 흐름도의 「통과해야 머지」가 실제로 되려면 필요하다 |
+| `develop`·`main` 보호 규칙: PR 필수 + 필수 검사(`lint.yml`·`test.yml`) 통과 | 저장소 admin | 2026-10-17 확인 시 규칙이 없어 CI가 실패해도 머지된다. 흐름도의 「통과해야 머지」가 실제로 되려면 필요하다 |
 
 빌드는 `ubuntu-24.04-arm` 러너를 사용한다.
 

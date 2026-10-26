@@ -17,7 +17,7 @@ services:
       - /srv/ject/secrets/dev-be.env
     environment:
       APP_ENV: dev
-      SPRING_PROFILES_ACTIVE: release
+      SPRING_PROFILES_ACTIVE: dev
       PORT: "8080"
       TZ: Asia/Seoul
       JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=50 -XX:+ExitOnOutOfMemoryError"

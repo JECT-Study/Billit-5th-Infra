@@ -8,6 +8,8 @@
 #   sudo setup-secrets.sh obs-env <host> <env> <DEV_IP>     /etc/ject/obs.env
 #   sudo setup-secrets.sh dev-swagger                       (dev) Swagger Basic 인증(사용자 ject)
 # APP_UID: 앱 컨테이너 UID(ject-smoke=65532). 앱 이미지가 바뀌면 맞춘다.
+# 앱(application-dev/prod.yml)은 REDIS_USERNAME·REDIS_PASSWORD·REDIS_SSL_ENABLED를 기본값 없이 읽는다.
+# Redis는 requirepass(기본 사용자 default)라 사용자 이름은 default. REDIS_PASSWORD_FILE은 스모크 앱용으로 남긴다.
 set -euo pipefail
 umask 077
 S=/srv/ject/secrets
@@ -67,11 +69,15 @@ SPRING_DATASOURCE_USERNAME=ject_app
 SPRING_DATASOURCE_PASSWORD=$PG_APP_PW
 REDIS_HOST=$DATA_IP
 REDIS_PORT=6379
+REDIS_USERNAME=default
+REDIS_PASSWORD=$REDIS_PW
+REDIS_SSL_ENABLED=false
 REDIS_PASSWORD_FILE=/run/secrets/redis_password
 EOF
   chmod 0400 "$S/prod-be.env"; echo "wrote prod-be.env" ;;
 dev-app-env)
   PG_APP_PW="$(cat "$S/pg_app_password")"
+  REDIS_PW="$(cat "$S/redis_password")"
   cat > "$S/dev-be.env" <<EOF
 DB_HOST=postgres
 DB_PORT=5432
@@ -85,6 +91,9 @@ SPRING_DATASOURCE_USERNAME=ject_dev_app
 SPRING_DATASOURCE_PASSWORD=$PG_APP_PW
 REDIS_HOST=redis
 REDIS_PORT=6379
+REDIS_USERNAME=default
+REDIS_PASSWORD=$REDIS_PW
+REDIS_SSL_ENABLED=false
 REDIS_PASSWORD_FILE=/run/secrets/redis_password
 EOF
   chmod 0400 "$S/dev-be.env"; echo "wrote dev-be.env" ;;

@@ -5,7 +5,8 @@
 # edge.env 변수: PROD_DOMAIN(선택), DEV_DOMAIN(선택), DEV_UPSTREAM(개발 VM 사설IP:8080)
 set -euo pipefail
 MODE="${1:?edge|dev-gateway}"
-SRC_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+# /usr/local/sbin의 링크로 실행해도 실제 설치 위치(/opt/ject)를 기준으로 원본을 찾는다.
+SRC_DIR="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
 
 proxy_common='
         proxy_http_version 1.1;
@@ -25,9 +26,10 @@ PC="$proxy_common"
 # 관리·관측 엔드포인트는 공개 경로로 연결하지 않는다. API 문서(Swagger)는 운영에서 항상 막는다.
 deny_internal='
     if ($request_uri ~ ";") { return 400; }
-    location ~* ^/(actuator|metrics|prometheus|swagger-ui|v3/api-docs) { return 404; }'
+    location ~* ^/(actuator|metrics|prometheus|swagger-ui|v3/api-docs|api-docs|scalar) { return 404; }'
 
-# 개발 게이트웨이: API 문서(springdoc /swagger-ui, /v3/api-docs)만 Basic 인증으로 연다(팀 명세 "Swagger 임시 사용").
+# 개발 게이트웨이: API 문서만 Basic 인증으로 연다(팀 명세 "Swagger 임시 사용").
+# 앱(ApiDocsConfig)은 /swagger-ui.html, /api-docs/**, /scalar/**에서, springdoc을 쓰면 /swagger-ui, /v3/api-docs에서 연다.
 # 해시 파일이 없으면 운영과 같이 막는다. 비밀번호: setup-secrets.sh dev-swagger (사용자 ject)
 dev_internal() {   # $1 = be upstream
   echo '
@@ -35,7 +37,7 @@ dev_internal() {   # $1 = be upstream
     location ~* ^/(actuator|metrics|prometheus) { return 404; }'
   if [ -s /srv/ject/dev/nginx/conf.d/swagger.htpasswd ]; then
     cat <<EOF
-    location ~* ^/(swagger-ui|v3/api-docs) {
+    location ~* ^/(swagger-ui|v3/api-docs|api-docs|scalar) {
         auth_basic "JECT dev API docs";
         auth_basic_user_file /etc/nginx/conf.d/swagger.htpasswd;
         set \$be_up $1;
@@ -44,7 +46,7 @@ dev_internal() {   # $1 = be upstream
     }
 EOF
   else
-    echo '    location ~* ^/(swagger-ui|v3/api-docs) { return 404; }'
+    echo '    location ~* ^/(swagger-ui|v3/api-docs|api-docs|scalar) { return 404; }'
   fi
 }
 
@@ -86,7 +88,10 @@ common_headers='
 # nginx.conf는 컨테이너에 파일 단위로 마운트돼 있어서 새 파일로 갈아끼우면(새 inode) 컨테이너는 옛 파일을 본다.
 # 그래서 제자리에서 내용만 덮어쓴다.
 put_main_conf() {   # dest
-  if [ -f "$1" ]; then cat "$SRC_DIR/nginx/nginx.conf" > "$1"; else install -m 0644 "$SRC_DIR/nginx/nginx.conf" "$1"; fi
+  local src="$SRC_DIR/nginx/nginx.conf"
+  # 원본이 없으면 덮어쓰기 전에 멈춘다(> 리다이렉트는 cat이 실패해도 대상 파일을 먼저 비운다).
+  [ -s "$src" ] || { echo "nginx 원본 설정 없음: $src" >&2; exit 1; }
+  if [ -f "$1" ]; then cat "$src" > "$1"; else install -m 0644 "$src" "$1"; fi
 }
 
 # 새 설정으로 교체한 뒤 실행 중인 Nginx로 문법 검사. 실패하면 이전 파일로 되돌리고 실패 처리.
