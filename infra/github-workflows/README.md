@@ -19,7 +19,7 @@
 | CI | `lint.yml`·`test.yml`(PR, `main` push) | CD는 준비한 `cd.yml`(develop push → 검사 → 빌드 → 개발 배포, 운영은 수동) |
 | 개발 서버 자원 | — | 개발 BE `cpus: 0.30`, 메모리 1,024MiB에서 실제 앱 기동 93초(10/26 로컬 측정, 배포 대기 180초 안) |
 
-준비한 변경: 앱 저장소 이슈 #4 → 포크 PR(브랜치 `chore/4-deploy-readiness`, 커밋 1개: `build.gradle.kts`·네 프로필 yml·`Dockerfile`·`.dockerignore`·`.github/workflows/cd.yml`·`docs/operations/configuration.md`). 로컬에서 ARM64 이미지 빌드, `/healthz`·`/readyz`(Redis 중지 시 503 → 복구 시 200)·8081 지표·정상 종료를 확인했다(2026-10-27 PR 제출). `cd.yml`의 자동 배포는 저장소 변수 `CD_ENABLED=true`일 때만 돌아, Environments 설정 전에 머지해도 develop push에서 아무 일도 하지 않는다.
+준비한 변경: 인프라 담당이 로컬에 둔 앱 저장소 브랜치(커밋 1개: `build.gradle.kts`·네 프로필 yml·`Dockerfile`·`.dockerignore`·`.github/workflows/cd.yml`·`docs/operations/configuration.md`). 로컬에서 ARM64 이미지 빌드, `/healthz`·`/readyz`(Redis 중지 시 503 → 복구 시 200)·8081 지표·정상 종료를 확인했다. 앱 저장소에 올리는 시점과 방법은 BE 리더와 정한다. `cd.yml`의 자동 배포는 저장소 변수 `CD_ENABLED=true`일 때만 돌아, Environments 설정 전에 들어가도 develop push에서 아무 일도 하지 않는다.
 
 ## 2. 필요한 권한 (조직 관리자·저장소 관리자에게 요청)
 
