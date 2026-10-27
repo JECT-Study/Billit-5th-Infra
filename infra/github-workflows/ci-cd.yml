@@ -3,6 +3,7 @@
 #  - develop push: ARM64 빌드 → GHCR → 개발 VM 자동 배포 → 커밋에 dev-verified 표시
 #  - 운영: workflow_dispatch로 개발에서 검증된 digest와 그 커밋을 지정. production Environment에 승인자를 두면 승인 후 배포. 롤백은 action=rollback
 # 앱 이미지에는 HEALTHCHECK과 /readyz(DB·Redis 연결 확인)를 둔다(ject-deploy가 확인).
+# 자동 배포(build·deploy-dev)는 저장소 변수 CD_ENABLED가 true일 때만 돈다. Environments·GHCR 설정 전에 넣어도 develop push가 실패하지 않는다.
 name: ci-cd
 
 on:
@@ -25,7 +26,7 @@ jobs:
     uses: ./.github/workflows/gradle-check.yml
 
   build:
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' && vars.CD_ENABLED == 'true'
     needs: check
     permissions: { contents: read, packages: write }
     uses: JECT-Study/Billit-5th-Infra/.github/workflows/build-arm64.yml@2c4523f36c3f2c0c223b7a3e1af9aa2421607abe

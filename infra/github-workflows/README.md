@@ -19,7 +19,7 @@
 | CI | `lint.yml`·`test.yml`(PR, `main` push) | CD는 준비한 `cd.yml`(develop push → 검사 → 빌드 → 개발 배포, 운영은 수동) |
 | 개발 서버 자원 | — | 개발 BE `cpus: 0.30`, 메모리 1,024MiB에서 실제 앱 기동 93초(10/26 로컬 측정, 배포 대기 180초 안) |
 
-준비한 변경: 인프라 담당이 만든 앱 저장소 브랜치 `infra/deploy-ready`(커밋 1개: `build.gradle.kts`·`application-dev/prod.yml`·`Dockerfile`·`.dockerignore`·`.github/workflows/cd.yml`). 로컬에서 ARM64 이미지 빌드, `/healthz`·`/readyz`(Redis 중지 시 503 → 복구 시 200)·8081 지표·정상 종료를 확인했다. 앱 저장소 쓰기 권한이 없어 BE 리더가 반영하거나 포크 PR로 올린다.
+준비한 변경: 앱 저장소 이슈 #4 → 포크 PR(브랜치 `chore/4-deploy-readiness`, 커밋 1개: `build.gradle.kts`·네 프로필 yml·`Dockerfile`·`.dockerignore`·`.github/workflows/cd.yml`·`docs/operations/configuration.md`). 로컬에서 ARM64 이미지 빌드, `/healthz`·`/readyz`(Redis 중지 시 503 → 복구 시 200)·8081 지표·정상 종료를 확인했다(2026-10-27 PR 제출). `cd.yml`의 자동 배포는 저장소 변수 `CD_ENABLED=true`일 때만 돌아, Environments 설정 전에 머지해도 develop push에서 아무 일도 하지 않는다.
 
 ## 2. 필요한 권한 (조직 관리자·저장소 관리자에게 요청)
 
@@ -29,7 +29,8 @@
 | 조직의 GitHub Packages 생성 허용 | 조직 관리자 | `ghcr.io/ject-study/<이미지>` 푸시(GITHUB_TOKEN `packages: write`) |
 | Actions 허용 정책에 `docker/*` 액션 포함 | 조직 관리자 | `build-arm64.yml`이 `docker/setup-buildx-action`, `docker/login-action`, `docker/build-push-action`을 쓴다. 막혀 있으면 시작 단계에서 실패(startup_failure)한다 |
 | (권장) `production` Environment Required reviewers | 저장소 admin | 공개 저장소는 무료로 쓸 수 있다. 운영 배포 승인자 지정 |
-| `develop`·`main` 보호 규칙: PR 필수 + 필수 검사(`lint.yml`·`test.yml`) 통과 | 저장소 admin | 2026-10-17 확인 시 규칙이 없어 CI가 실패해도 머지된다. 흐름도의 「통과해야 머지」가 실제로 되려면 필요하다 |
+| `develop`·`main` 보호 규칙: PR 필수 + 필수 검사(`lint.yml`·`test.yml`) 통과 | 저장소 admin | 2026-10-27 확인 시 `develop` 규칙은 삭제 금지·강제 push 금지·선형 이력뿐이라 PR 없이, CI가 실패해도 머지된다. 흐름도의 「통과해야 머지」가 실제로 되려면 필요하다 |
+| 저장소 변수 `CD_ENABLED` = `true` | 저장소 admin | 위 Environments·GHCR·액션 허용이 끝난 뒤 켠다. 켜기 전에는 `cd.yml`이 develop push에서 아무 작업도 하지 않는다(수동 실행은 변수와 무관) |
 
 빌드는 `ubuntu-24.04-arm` 러너를 사용한다.
 
@@ -95,6 +96,8 @@ deploy-dev:
 | var | `JECT_BASTION_ID`, `JECT_INSTANCE_ID`, `JECT_PRIVATE_IP` | Bastion OCID, 대상 VM OCID·사설 IP(개발=`ject-dev-obs`, 운영=`ject-prod-app`) |
 | var | `JECT_HOST_KEY` | 대상 VM의 `ssh-ed25519 AAAA...` 호스트 키 |
 | var | `JECT_IMAGE_PREFIX` | `ghcr.io/ject-study/ject-` |
+
+Environment가 아니라 **저장소** 변수(Settings → Secrets and variables → Actions → Variables)로 `CD_ENABLED`를 두고, 위 값을 다 넣은 뒤 `true`로 바꾼다.
 
 개인키는 GitHub에서 다시 읽을 수 없다. 옮길 때는 **새 키를 만들어** 앱 저장소에 넣고(`oci iam user api-key upload`, `ject-deploy-key install`),
 새 키로 배포를 확인한 뒤 기존 시험용 키를 폐기한다.
