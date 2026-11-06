@@ -10,6 +10,7 @@ set -euo pipefail
 umask 027
 
 CONF=/etc/ject/deploy.conf
+# shellcheck disable=SC1090
 [ -f "$CONF" ] && . "$CONF"
 ALLOWED_IMAGE_PREFIX="${ALLOWED_IMAGE_PREFIX:-ghcr.io/}"
 MIN_FREE_PCT="${MIN_FREE_PCT:-15}"
@@ -53,27 +54,55 @@ set_release() {   # var image
   mv "$tmp" "$RELEASE"
 }
 
+fe_routing_preflight() {   # service: 최초 FE 배포 전에 운영자가 준비할 라우팅 계약
+  [ "$1" = fe ] || return 0
+  local upstream config
+  case "$ENVN" in
+    dev) upstream="${DEV_FE_UPSTREAM:-}" ;;
+    prod) upstream="${PROD_FE_UPSTREAM:-}" ;;
+    *) return 1 ;;
+  esac
+  [ "$upstream" = fe:3000 ] || {
+    log "FE 라우팅 미준비: ${ENVN} FE_UPSTREAM=fe:3000 설정·Nginx 생성/검사/reload 후 배포하세요. 실패 시 이전 라우팅을 복구하세요."
+    return 1
+  }
+  config=$(docker exec "$GATEWAY" nginx -T 2>/dev/null) || {
+    log "FE 라우팅 검사 실패: 게이트웨이 Nginx 설정을 확인하세요."
+    return 1
+  }
+  # Nginx 변수 이름은 셸에서 확장하지 않는다.
+  # shellcheck disable=SC2016
+  grep -Eq '^[[:space:]]*set[[:space:]]+\$web_up[[:space:]]+fe:3000[[:space:]]*;' <<< "$config" || {
+    log "FE 라우팅 미반영: Nginx 생성/검사/reload 후 배포하세요."
+    return 1
+  }
+}
+
 ready_checks() {   # service
-  local svc="$1" cid status i
+  local svc="$1" cid status upstream ready_path
   cid="$(compose ps -q "$svc")"
   [ -n "$cid" ] || { log "컨테이너 없음"; return 1; }
   status="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$cid")"
   [ "$status" = healthy ] || { log "healthcheck 상태: $status"; return 1; }
-  [ "$svc" = be ] || return 0
-  # 1) 게이트웨이 컨테이너에서 앱 readiness 직접 확인 (DB·Redis 연결 포함)
+  case "$svc" in
+    be) upstream=be:8080; ready_path=/readyz ;;
+    fe) upstream=fe:3000; ready_path=/healthz ;;
+    *) log "알 수 없는 서비스: $svc"; return 1 ;;
+  esac
+  # 1) 게이트웨이에서 서비스에 직접 접근. FE healthz는 생존 확인이며 업무 E2E가 아니다.
   local ok=0
-  for i in $(seq 1 30); do
-    if docker exec "$GATEWAY" wget -q -T 3 -O /dev/null "http://be:8080/readyz"; then ok=1; break; fi
+  for _ in $(seq 1 30); do
+    if docker exec "$GATEWAY" wget -q -T 3 -O /dev/null "http://$upstream$ready_path"; then ok=1; break; fi
     sleep 2
   done
   [ "$ok" = 1 ] || { log "앱 readiness 실패"; return 1; }
   # 2) Nginx 라우팅을 거친 readiness
   if [ "$ENVN" = prod ] && [ -n "${PROD_DOMAIN:-}" ] && [ -s "/srv/ject/certs/live/${CERT_NAME:-ject}/fullchain.pem" ]; then
-    curl -fsS -m 5 --resolve "$PROD_DOMAIN:443:127.0.0.1" "https://$PROD_DOMAIN/readyz" >/dev/null || { log "Nginx(HTTPS) 경유 readiness 실패"; return 1; }
+    curl -fsS -m 5 --resolve "$PROD_DOMAIN:443:127.0.0.1" "https://$PROD_DOMAIN$ready_path" >/dev/null || { log "Nginx(HTTPS) 경유 readiness 실패"; return 1; }
   elif [ "$ENVN" = prod ]; then
-    curl -fsS -m 5 "http://127.0.0.1/readyz" >/dev/null || { log "Nginx 경유 readiness 실패"; return 1; }
+    curl -fsS -m 5 "http://127.0.0.1$ready_path" >/dev/null || { log "Nginx 경유 readiness 실패"; return 1; }
   else
-    curl -fsS -m 5 "http://${DEV_BIND_IP:?/etc/ject/host.env에 DEV_BIND_IP 필요}:8080/readyz" >/dev/null || { log "개발 게이트웨이 경유 readiness 실패"; return 1; }
+    curl -fsS -m 5 "http://${DEV_BIND_IP:?/etc/ject/host.env에 DEV_BIND_IP 필요}:8080$ready_path" >/dev/null || { log "개발 게이트웨이 경유 readiness 실패"; return 1; }
   fi
   return 0
 }
@@ -92,7 +121,9 @@ prune_old_images() {   # repo(digest 제외)
   done
 }
 
+# shellcheck disable=SC1091
 [ -f /srv/ject/app/edge.env ] && . /srv/ject/app/edge.env
+# shellcheck disable=SC1091
 [ -f /etc/ject/host.env ] && . /etc/ject/host.env
 
 case "$CMD" in
@@ -109,6 +140,7 @@ SVC="${3:-}"; VAR="$(svc_var "$SVC")"
 exec 9>"/run/lock/ject-deploy-$ENVN.lock"
 [[ "$DEPLOY_LOCK_TIMEOUT" =~ ^[0-9]+$ ]] || die "DEPLOY_LOCK_TIMEOUT은 0 이상의 정수여야 한다"
 flock -w "$DEPLOY_LOCK_TIMEOUT" 9 || die "$ENVN 환경의 다른 배포를 ${DEPLOY_LOCK_TIMEOUT}초 기다렸지만 끝나지 않았다"
+fe_routing_preflight "$SVC" || die "이미지 변경 전 중단: FE 최초 배포 준비 절차를 확인하세요"
 
 if [ "$CMD" = deploy ]; then
   NEW="${4:-}"; ACTOR="${5:-${SUDO_USER:-root}}"; REG_USER="${6:-}"

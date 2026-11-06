@@ -1,0 +1,522 @@
+{
+  "evaluation_interval": "1m",
+  "tests": [
+    {
+      "name": "관측 정상",
+      "interval": "1m",
+      "input_series": [
+        {
+          "series": "up{job=\"node\",host=\"dev\"}",
+          "values": "1x6"
+        },
+        {
+          "series": "up{job=\"obs\",host=\"dev\",component=\"grafana\"}",
+          "values": "1x6"
+        },
+        {
+          "series": "up{job=\"obs\",host=\"dev\",component=\"loki\"}",
+          "values": "1x6"
+        },
+        {
+          "series": "up{job=\"obs\",host=\"dev\",component=\"prometheus\"}",
+          "values": "1x6"
+        }
+      ],
+      "promql_expr_test": [
+        {
+          "expr": "ject-obs-component-down",
+          "eval_time": "3m",
+          "exp_samples": [
+            {
+              "labels": "{}",
+              "value": 0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "한 구성요소 실패",
+      "interval": "1m",
+      "input_series": [
+        {
+          "series": "up{job=\"node\",host=\"dev\"}",
+          "values": "1x6"
+        },
+        {
+          "series": "up{job=\"obs\",host=\"dev\",component=\"grafana\"}",
+          "values": "0x6"
+        },
+        {
+          "series": "up{job=\"obs\",host=\"dev\",component=\"loki\"}",
+          "values": "1x6"
+        },
+        {
+          "series": "up{job=\"obs\",host=\"dev\",component=\"prometheus\"}",
+          "values": "1x6"
+        }
+      ],
+      "promql_expr_test": [
+        {
+          "expr": "ject-obs-component-down",
+          "eval_time": "3m",
+          "exp_samples": [
+            {
+              "labels": "{}",
+              "value": 1
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "한 구성요소 누락",
+      "interval": "1m",
+      "input_series": [
+        {
+          "series": "up{job=\"node\",host=\"dev\"}",
+          "values": "1x6"
+        },
+        {
+          "series": "up{job=\"obs\",host=\"dev\",component=\"loki\"}",
+          "values": "1x6"
+        },
+        {
+          "series": "up{job=\"obs\",host=\"dev\",component=\"prometheus\"}",
+          "values": "1x6"
+        }
+      ],
+      "promql_expr_test": [
+        {
+          "expr": "ject-obs-component-down",
+          "eval_time": "3m",
+          "exp_samples": [
+            {
+              "labels": "{}",
+              "value": 1
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "전체 구성요소 누락",
+      "interval": "1m",
+      "input_series": [
+        {
+          "series": "up{job=\"node\",host=\"dev\"}",
+          "values": "1x6"
+        }
+      ],
+      "promql_expr_test": [
+        {
+          "expr": "ject-obs-component-down",
+          "eval_time": "3m",
+          "exp_samples": [
+            {
+              "labels": "{}",
+              "value": 3
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "180초 오래된 성공",
+      "interval": "1m",
+      "input_series": [
+        {
+          "series": "up{job=\"node\",host=\"dev\"}",
+          "values": "1x6"
+        },
+        {
+          "series": "up{job=\"obs\",host=\"dev\",component=\"grafana\"}",
+          "values": "1"
+        },
+        {
+          "series": "up{job=\"obs\",host=\"dev\",component=\"loki\"}",
+          "values": "1x6"
+        },
+        {
+          "series": "up{job=\"obs\",host=\"dev\",component=\"prometheus\"}",
+          "values": "1x6"
+        }
+      ],
+      "promql_expr_test": [
+        {
+          "expr": "ject-obs-component-down",
+          "eval_time": "3m",
+          "exp_samples": [
+            {
+              "labels": "{}",
+              "value": 1
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "노드 미수집 중복 억제",
+      "interval": "1m",
+      "input_series": [],
+      "promql_expr_test": [
+        {
+          "expr": "ject-obs-component-down",
+          "eval_time": "3m",
+          "exp_samples": [
+            {
+              "labels": "{}",
+              "value": 0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "노드 실패 중복 억제",
+      "interval": "1m",
+      "input_series": [
+        {
+          "series": "up{job=\"node\",host=\"dev\"}",
+          "values": "0x6"
+        }
+      ],
+      "promql_expr_test": [
+        {
+          "expr": "ject-obs-component-down",
+          "eval_time": "3m",
+          "exp_samples": [
+            {
+              "labels": "{}",
+              "value": 0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "노드 stale 중복 억제",
+      "interval": "1m",
+      "input_series": [
+        {
+          "series": "up{job=\"node\",host=\"dev\"}",
+          "values": "1"
+        }
+      ],
+      "promql_expr_test": [
+        {
+          "expr": "ject-obs-component-down",
+          "eval_time": "3m",
+          "exp_samples": [
+            {
+              "labels": "{}",
+              "value": 0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "다른 host/job 제외",
+      "interval": "1m",
+      "input_series": [
+        {
+          "series": "up{job=\"node\",host=\"dev\"}",
+          "values": "1x6"
+        },
+        {
+          "series": "up{job=\"obs\",host=\"dev\",component=\"grafana\"}",
+          "values": "1x6"
+        },
+        {
+          "series": "up{job=\"obs\",host=\"dev\",component=\"loki\"}",
+          "values": "1x6"
+        },
+        {
+          "series": "up{job=\"obs\",host=\"dev\",component=\"prometheus\"}",
+          "values": "1x6"
+        },
+        {
+          "series": "up{job=\"obs\",host=\"outside\",component=\"grafana\"}",
+          "values": "0x6"
+        },
+        {
+          "series": "up{job=\"wrong\",host=\"dev\",component=\"grafana\"}",
+          "values": "0x6"
+        }
+      ],
+      "promql_expr_test": [
+        {
+          "expr": "ject-obs-component-down",
+          "eval_time": "3m",
+          "exp_samples": [
+            {
+              "labels": "{}",
+              "value": 0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "ject-metrics-write-failed 증가없음",
+      "interval": "1m",
+      "input_series": [
+        {
+          "series": "up{job=\"node\",host=\"dev\"}",
+          "values": "1x6"
+        },
+        {
+          "series": "prometheus_remote_storage_samples_failed_total{job=\"integrations/self\",host=\"dev\"}",
+          "values": "5x6"
+        }
+      ],
+      "promql_expr_test": [
+        {
+          "expr": "ject-metrics-write-failed",
+          "eval_time": "3m",
+          "exp_samples": [
+            {
+              "labels": "{}",
+              "value": 0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "ject-metrics-write-failed 증가",
+      "interval": "1m",
+      "input_series": [
+        {
+          "series": "up{job=\"node\",host=\"dev\"}",
+          "values": "1x6"
+        },
+        {
+          "series": "prometheus_remote_storage_samples_failed_total{job=\"integrations/self\",host=\"dev\"}",
+          "values": "0+1x6"
+        }
+      ],
+      "promql_expr_test": [
+        {
+          "expr": "ject-metrics-write-failed",
+          "eval_time": "3m",
+          "exp_samples": [
+            {
+              "labels": "{}",
+              "value": 1
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "ject-metrics-write-failed 외부 제외",
+      "interval": "1m",
+      "input_series": [
+        {
+          "series": "up{job=\"node\",host=\"dev\"}",
+          "values": "1x6"
+        },
+        {
+          "series": "prometheus_remote_storage_samples_failed_total{job=\"integrations/self\",host=\"outside\"}",
+          "values": "0+1x6"
+        },
+        {
+          "series": "prometheus_remote_storage_samples_failed_total{job=\"wrong\",host=\"dev\"}",
+          "values": "0+1x6"
+        }
+      ],
+      "promql_expr_test": [
+        {
+          "expr": "ject-metrics-write-failed",
+          "eval_time": "3m",
+          "exp_samples": [
+            {
+              "labels": "{}",
+              "value": 0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "ject-metrics-write-failed 노드 중단",
+      "interval": "1m",
+      "input_series": [
+        {
+          "series": "prometheus_remote_storage_samples_failed_total{job=\"integrations/self\",host=\"dev\"}",
+          "values": "0+1x6"
+        }
+      ],
+      "promql_expr_test": [
+        {
+          "expr": "ject-metrics-write-failed",
+          "eval_time": "3m",
+          "exp_samples": [
+            {
+              "labels": "{}",
+              "value": 0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "ject-metrics-write-failed counter reset 증가없음",
+      "interval": "1m",
+      "input_series": [
+        {
+          "series": "up{job=\"node\",host=\"dev\"}",
+          "values": "1x6"
+        },
+        {
+          "series": "prometheus_remote_storage_samples_failed_total{job=\"integrations/self\",host=\"dev\"}",
+          "values": "5 5 0 0 0 0"
+        }
+      ],
+      "promql_expr_test": [
+        {
+          "expr": "ject-metrics-write-failed",
+          "eval_time": "3m",
+          "exp_samples": [
+            {
+              "labels": "{}",
+              "value": 0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "ject-logs-write-dropped 증가없음",
+      "interval": "1m",
+      "input_series": [
+        {
+          "series": "up{job=\"node\",host=\"dev\"}",
+          "values": "1x6"
+        },
+        {
+          "series": "loki_write_dropped_entries_total{job=\"integrations/self\",host=\"dev\"}",
+          "values": "5x6"
+        }
+      ],
+      "promql_expr_test": [
+        {
+          "expr": "ject-logs-write-dropped",
+          "eval_time": "3m",
+          "exp_samples": [
+            {
+              "labels": "{}",
+              "value": 0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "ject-logs-write-dropped 증가",
+      "interval": "1m",
+      "input_series": [
+        {
+          "series": "up{job=\"node\",host=\"dev\"}",
+          "values": "1x6"
+        },
+        {
+          "series": "loki_write_dropped_entries_total{job=\"integrations/self\",host=\"dev\"}",
+          "values": "0+1x6"
+        }
+      ],
+      "promql_expr_test": [
+        {
+          "expr": "ject-logs-write-dropped",
+          "eval_time": "3m",
+          "exp_samples": [
+            {
+              "labels": "{}",
+              "value": 1
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "ject-logs-write-dropped 외부 제외",
+      "interval": "1m",
+      "input_series": [
+        {
+          "series": "up{job=\"node\",host=\"dev\"}",
+          "values": "1x6"
+        },
+        {
+          "series": "loki_write_dropped_entries_total{job=\"integrations/self\",host=\"outside\"}",
+          "values": "0+1x6"
+        },
+        {
+          "series": "loki_write_dropped_entries_total{job=\"wrong\",host=\"dev\"}",
+          "values": "0+1x6"
+        }
+      ],
+      "promql_expr_test": [
+        {
+          "expr": "ject-logs-write-dropped",
+          "eval_time": "3m",
+          "exp_samples": [
+            {
+              "labels": "{}",
+              "value": 0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "ject-logs-write-dropped 노드 중단",
+      "interval": "1m",
+      "input_series": [
+        {
+          "series": "loki_write_dropped_entries_total{job=\"integrations/self\",host=\"dev\"}",
+          "values": "0+1x6"
+        }
+      ],
+      "promql_expr_test": [
+        {
+          "expr": "ject-logs-write-dropped",
+          "eval_time": "3m",
+          "exp_samples": [
+            {
+              "labels": "{}",
+              "value": 0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "ject-logs-write-dropped counter reset 증가없음",
+      "interval": "1m",
+      "input_series": [
+        {
+          "series": "up{job=\"node\",host=\"dev\"}",
+          "values": "1x6"
+        },
+        {
+          "series": "loki_write_dropped_entries_total{job=\"integrations/self\",host=\"dev\"}",
+          "values": "5 5 0 0 0 0"
+        }
+      ],
+      "promql_expr_test": [
+        {
+          "expr": "ject-logs-write-dropped",
+          "eval_time": "3m",
+          "exp_samples": [
+            {
+              "labels": "{}",
+              "value": 0
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

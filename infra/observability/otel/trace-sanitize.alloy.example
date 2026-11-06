@@ -1,0 +1,98 @@
+// 격리 합성 시험 전용. 운영 설치 대상 아님. 실제 앱 service/env 계약은 미정.
+// 공식 근거: https://grafana.com/docs/alloy/v1.20/reference/components/otelcol/otelcol.processor.transform/
+// https://grafana.com/docs/alloy/v1.20/reference/components/otelcol/otelcol.exporter.otlphttp/
+// Alloy v1.20.1 go.mod: OTTL v0.161.0. set(nil)은 featuregate에 의존하므로 쓰지 않는다.
+// https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/v0.161.0/pkg/ottl/ottlfuncs/func_set.go
+// links 보유 span은 통째로 버린다. 이벤트/예외 상세·scope 이름·URL·SQL·route도 보존하지 않는다.
+// 따라서 진단 유용성과 parent/link 관계가 손실된다. 모든 민감정보 제거 보장이 아니다.
+otelcol.receiver.otlp "synthetic" {
+  http {
+    endpoint = "0.0.0.0:4318"
+  }
+  output {
+    traces = [otelcol.processor.memory_limiter.synthetic.input]
+  }
+}
+
+// 합성시험 초기값. heap 관측 기반 제한이며 컨테이너 RSS 하드상한을 대체하지 않는다.
+otelcol.processor.memory_limiter "synthetic" {
+  check_interval = "1s"
+  limit = "128MiB"
+  spike_limit = "32MiB"
+  output {
+    traces = [otelcol.processor.filter.reject_links.input]
+  }
+}
+
+otelcol.processor.filter "reject_links" {
+  error_mode = "propagate"
+  traces {
+    span = [`Len(links) > 0`]
+    spanevent = [`true`]
+  }
+  output {
+    traces = [otelcol.processor.transform.sanitize.input]
+  }
+}
+
+otelcol.processor.transform "sanitize" {
+  error_mode = "propagate"
+  trace_statements {
+    context = "resource"
+    statements = [
+      `keep_keys(attributes, [])`,
+      `set(attributes["service.name"], "synthetic")`,
+      `set(attributes["deployment.environment.name"], "test")`,
+      `set(schema_url, "")`,
+    ]
+  }
+  trace_statements {
+    context = "scope"
+    statements = [
+      `keep_keys(attributes, [])`,
+      `set(name, "sanitized")`,
+      `set(version, "")`,
+      `set(schema_url, "")`,
+    ]
+  }
+  trace_statements {
+    context = "span"
+    statements = [
+      `set(name, "operation")`,
+      `set(trace_state, "")`,
+      `set(status.message, "")`,
+      `keep_keys(attributes, ["http.request.method", "http.response.status_code", "db.system"])`,
+      `delete_key(attributes, "http.request.method") where attributes["http.request.method"] != "GET" and attributes["http.request.method"] != "POST" and attributes["http.request.method"] != "PUT" and attributes["http.request.method"] != "PATCH" and attributes["http.request.method"] != "DELETE" and attributes["http.request.method"] != "HEAD" and attributes["http.request.method"] != "OPTIONS"`,
+      `delete_key(attributes, "db.system") where attributes["db.system"] != "postgresql" and attributes["db.system"] != "redis"`,
+      `delete_key(attributes, "http.response.status_code") where not IsInt(attributes["http.response.status_code"])`,
+      `delete_key(attributes, "http.response.status_code") where attributes["http.response.status_code"] != nil and (attributes["http.response.status_code"] < 100 or attributes["http.response.status_code"] > 599)`,
+    ]
+  }
+  output {
+    traces = [otelcol.processor.batch.synthetic.input]
+  }
+}
+
+// max_size는 span 개수 상한이며 요청 바이트·전체 저장량 상한이 아니다.
+otelcol.processor.batch "synthetic" {
+  send_batch_size = 16
+  send_batch_max_size = 32
+  timeout = "200ms"
+  output {
+    traces = [otelcol.exporter.otlphttp.synthetic.input]
+  }
+}
+
+otelcol.exporter.otlphttp "synthetic" {
+  encoding = "json"
+  client {
+    endpoint = "http://sink:8080"
+    compression = "none"
+  }
+  sending_queue {
+    enabled = false
+  }
+  retry_on_failure {
+    enabled = false
+  }
+}

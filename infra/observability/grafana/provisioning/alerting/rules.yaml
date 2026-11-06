@@ -292,6 +292,46 @@ groups:
           description: "운영 데이터 VM: sudo cat /srv/ject/backup-status/restore-last.json, journalctl -u ject-pg-restore-test."
         isPaused: false
   - orgId: 1
+    name: "ject-restore-freshness"
+    folder: "JECT"
+    interval: "1m"
+    rules:
+      - uid: "ject-restore-test-stale"
+        title: "월간 복원 시험 오래됨 또는 지표 누락"
+        condition: "C"
+        data:
+          - refId: "A"
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: "prom"
+            model:
+              refId: "A"
+              expr: "(up{job=\"node\",host=\"prod-data\"} == 1 and (time() - timestamp(up{job=\"node\",host=\"prod-data\"}) < 180)) unless on(host) (ject_restore_test_last_run_timestamp_seconds{job=\"node\",host=\"prod-data\"} > 0 and (time() - ject_restore_test_last_run_timestamp_seconds{job=\"node\",host=\"prod-data\"} <= 32 * 86400) and (ject_restore_test_last_run_timestamp_seconds{job=\"node\",host=\"prod-data\"} <= time()) and (time() - timestamp(ject_restore_test_last_run_timestamp_seconds{job=\"node\",host=\"prod-data\"}) < 180))"
+              instant: true
+              intervalMs: 30000
+              maxDataPoints: 43200
+          - refId: "C"
+            datasourceUid: "__expr__"
+            model:
+              refId: "C"
+              type: "threshold"
+              expression: "A"
+              conditions:
+                - evaluator:
+                    type: "gt"
+                    params:
+                      - 0
+        noDataState: "OK"
+        execErrState: "Alerting"
+        for: "5m"
+        labels:
+          severity: "warning"
+        annotations:
+          summary: "월간 복원 시험 기록이 오래되었거나 유효한 지표가 없습니다"
+          description: "초기값: 매월1일05시KST 일정에 대해 최대32일 경과를 감시합니다. 정확한 월별 실행기한 감시는 아니며 짧은 달에는 탐지가 늦습니다. 지표 누락·180초 이상 오래된 표본·미래 시각도 경고합니다. ject-pg-restore-test.timer와 restore-last.json을 읽기 전용으로 확인하세요. 최근 실행은 복원 성공 증거가 아니며 기존 실패 경보를 함께 확인합니다."
+        isPaused: false
+  - orgId: 1
     name: "ject-external"
     folder: "JECT"
     interval: "1m"
@@ -307,7 +347,7 @@ groups:
             datasourceUid: "prom"
             model:
               refId: "A"
-              expr: "probe_success or on() (0 * absent(probe_success))"
+              expr: "(min by(target) (probe_success{job=~\"integrations/blackbox/(dev|prod)\",host=\"dev\",target=~\"dev|prod\"} and (time() - timestamp(probe_success{job=~\"integrations/blackbox/(dev|prod)\",host=\"dev\",target=~\"dev|prod\"}) < 180))) or on(target) (label_replace(vector(0), \"target\", \"dev\", \"\", \"\") or label_replace(vector(0), \"target\", \"prod\", \"\", \"\"))"
               instant: true
               intervalMs: 30000
               maxDataPoints: 43200
@@ -329,7 +369,7 @@ groups:
           severity: "critical"
         annotations:
           summary: "{{ $labels.target }} 공인 주소(/readyz) 접속 실패"
-          description: "개발·모니터링 VM에서 NAT를 거쳐 공인 HTTPS 주소를 1분마다 시험합니다. 운영 Nginx·인증서·앱 readiness(DB·Redis)를 확인하세요. OCI Health Checks는 무료가 아니어서 이 시험으로 대신합니다."
+          description: "개발·모니터링 VM에서 NAT를 거쳐 공인 HTTPS 주소를 1분마다 시험합니다. 대상별 실패·누락·180초 이상 오래된 표본을 감지합니다. 운영 Nginx·인증서·앱 readiness(DB·Redis)를 확인하세요. OCI Health Checks는 무료가 아니어서 이 시험으로 대신합니다."
         isPaused: false
       - uid: "ject-cert-expiry"
         title: "인증서 만료 14일 이내"
@@ -365,6 +405,116 @@ groups:
         annotations:
           summary: "{{ $labels.target }} 인증서 만료까지 {{ $values.A.Value }}일"
           description: "자동 갱신(ject-certbot-renew.timer, 만료 30일 전부터 시도)이 실패하고 있습니다. sudo /opt/ject/bin/ject-cert renew 로그를 확인하세요."
+        isPaused: false
+  - orgId: 1
+    name: "ject-observability"
+    folder: "JECT"
+    interval: "1m"
+    rules:
+      - uid: "ject-obs-component-down"
+        title: "관측 도구 수집 실패 또는 누락"
+        condition: "C"
+        data:
+          - refId: "A"
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: "prom"
+            model:
+              refId: "A"
+              expr: "(label_replace(label_replace(vector(1), \"host\", \"dev\", \"\", \"\"), \"component\", \"grafana\", \"\", \"\") or label_replace(label_replace(vector(1), \"host\", \"dev\", \"\", \"\"), \"component\", \"loki\", \"\", \"\") or label_replace(label_replace(vector(1), \"host\", \"dev\", \"\", \"\"), \"component\", \"prometheus\", \"\", \"\")) unless on(host,component) (up{job=\"obs\",host=\"dev\",component=~\"grafana|loki|prometheus\"} == 1 and (time() - timestamp(up{job=\"obs\",host=\"dev\",component=~\"grafana|loki|prometheus\"}) < 180)) and on(host) (up{job=\"node\",host=\"dev\"} == 1 and (time() - timestamp(up{job=\"node\",host=\"dev\"}) < 180))"
+              instant: true
+              intervalMs: 30000
+              maxDataPoints: 43200
+          - refId: "C"
+            datasourceUid: "__expr__"
+            model:
+              refId: "C"
+              type: "threshold"
+              expression: "A"
+              conditions:
+                - evaluator:
+                    type: "gt"
+                    params:
+                      - 0
+        noDataState: "OK"
+        execErrState: "Alerting"
+        for: "2m"
+        labels:
+          severity: "critical"
+        annotations:
+          summary: "{{ $labels.component }} 관측 지표 수집 실패"
+          description: "초기값: 180초 신선도와 2분 지속을 확인합니다. 개발 노드 지표가 살아 있을 때만 울립니다. Grafana/Prometheus 자체가 완전히 멈추면 이 내부 경보도 전달하지 못하므로 OCI 직접 이메일 경로를 유지합니다."
+        isPaused: false
+      - uid: "ject-metrics-write-failed"
+        title: "메트릭 전송 실패 증가"
+        condition: "C"
+        data:
+          - refId: "A"
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: "prom"
+            model:
+              refId: "A"
+              expr: "sum by(host) (increase(prometheus_remote_storage_samples_failed_total{job=\"integrations/self\",host=~\"dev|prod-app|prod-data\"}[5m])) and on(host) (up{job=\"node\",host=~\"dev|prod-app|prod-data\"} == 1 and (time() - timestamp(up{job=\"node\",host=~\"dev|prod-app|prod-data\"}) < 180))"
+              instant: true
+              intervalMs: 30000
+              maxDataPoints: 43200
+          - refId: "C"
+            datasourceUid: "__expr__"
+            model:
+              refId: "C"
+              type: "threshold"
+              expression: "A"
+              conditions:
+                - evaluator:
+                    type: "gt"
+                    params:
+                      - 0
+        noDataState: "OK"
+        execErrState: "Alerting"
+        for: "2m"
+        labels:
+          severity: "warning"
+        annotations:
+          summary: "{{ $labels.host }} 메트릭 전송 실패 증가"
+          description: "초기값: 최근 5분 실패 증가가 2분 지속될 때 확인합니다. Alloy remote-write·인증·수신기 상태를 확인하세요. 노드 미수집은 서버 지표 끊김 경보가 담당하며, 이 규칙만으로 모든 전송 손실을 보장하지 않습니다."
+        isPaused: false
+      - uid: "ject-logs-write-dropped"
+        title: "로그 전송 폐기 증가"
+        condition: "C"
+        data:
+          - refId: "A"
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: "prom"
+            model:
+              refId: "A"
+              expr: "sum by(host) (increase(loki_write_dropped_entries_total{job=\"integrations/self\",host=~\"dev|prod-app|prod-data\"}[5m])) and on(host) (up{job=\"node\",host=~\"dev|prod-app|prod-data\"} == 1 and (time() - timestamp(up{job=\"node\",host=~\"dev|prod-app|prod-data\"}) < 180))"
+              instant: true
+              intervalMs: 30000
+              maxDataPoints: 43200
+          - refId: "C"
+            datasourceUid: "__expr__"
+            model:
+              refId: "C"
+              type: "threshold"
+              expression: "A"
+              conditions:
+                - evaluator:
+                    type: "gt"
+                    params:
+                      - 0
+        noDataState: "OK"
+        execErrState: "Alerting"
+        for: "2m"
+        labels:
+          severity: "warning"
+        annotations:
+          summary: "{{ $labels.host }} Loki 전송 로그 폐기 증가"
+          description: "초기값: 최근 5분 폐기 증가가 2분 지속될 때 확인합니다. Loki 수신 제한·인증·전송 오류를 확인하고 원본 로그를 알림에 복사하지 않습니다. 정상 마스킹/drop 처리와 전송 실패 카운터를 구분합니다."
         isPaused: false
   - orgId: 1
     name: "ject-app"

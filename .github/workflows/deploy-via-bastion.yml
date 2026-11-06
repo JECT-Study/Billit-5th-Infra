@@ -55,6 +55,25 @@ jobs:
             [[ "$IMAGE" =~ ^ghcr\.io/[a-z0-9._/-]+@sha256:[a-f0-9]{64}$ && "$IMAGE" == "$PREFIX"* ]] || { echo "image must be ${PREFIX}...@sha256:<digest>"; exit 1; }
           fi
 
+      - name: Verify image revision
+        id: revision
+        if: inputs.action == 'deploy'
+        env:
+          GHCR_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          sha="${COMMIT:-$GITHUB_SHA}"
+          [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || { echo "이미지 검증에는 40자 commit SHA가 필요"; exit 1; }
+          # ARM64 이미지는 실행하지 않고 digest 고정 참조의 설정만 검사한다.
+          export DOCKER_CONFIG
+          DOCKER_CONFIG=$(mktemp -d "$RUNNER_TEMP/revision-docker.XXXXXX")
+          trap 'rm -rf "$DOCKER_CONFIG"' EXIT
+          printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          docker pull --platform linux/arm64 "$IMAGE"
+          revision=$(docker image inspect --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}' "$IMAGE")
+          [ "$revision" = "$sha" ] || { echo "이미지 revision과 배포 commit 불일치"; exit 1; }
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+
       - name: Require dev verification for prod
         if: inputs.environment == 'prod' && inputs.action == 'deploy'
         env:
@@ -139,7 +158,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
-          SHA: ${{ inputs.commit || github.sha }}
+          SHA: ${{ steps.revision.outputs.sha }}
         run: |
           gh api "repos/$REPO/statuses/$SHA" -f state=success -f context=ject/dev-verified \
             -f description="${IMAGE#*@}" >/dev/null

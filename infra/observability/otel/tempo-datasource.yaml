@@ -1,0 +1,10 @@
+# opt-in: 기본 provisioning 디렉터리 밖에 둔다. Tempo 검증 뒤 개발 Grafana에만 설치.
+apiVersion: 1
+datasources:
+  - name: Tempo (개발 인프라)
+    uid: ject-tempo-dev
+    type: tempo
+    access: proxy
+    url: http://127.0.0.1:3200
+    isDefault: false
+    editable: false

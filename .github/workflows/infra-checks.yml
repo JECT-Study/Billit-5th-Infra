@@ -1,0 +1,32 @@
+name: infra-checks
+
+on:
+  pull_request:
+    paths: ['infra/**', '.github/workflows/**']
+  push:
+    branches: [main]
+    paths: ['infra/**', '.github/workflows/**']
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Run infrastructure regression tests
+        run: python3 -B -m unittest discover -s infra/tests -p 'test_*.py' -v
+      - name: Check changed operational shell entrypoints
+        run: |
+          bash -n infra/scripts/ject-deploy
+          bash -n infra/scripts/ject-pg-restore-test
+          bash -n infra/tests/redis-metrics-e2e.sh
+      - name: Keep reusable workflow copies aligned
+        run: |
+          for name in build-arm64 deploy-via-bastion gradle-check infra-checks; do
+            cmp "infra/github-workflows/$name.yml" ".github/workflows/$name.yml"
+          done

@@ -6,6 +6,7 @@
 set -euo pipefail
 umask 077
 CONF=/etc/ject/backup.conf
+# shellcheck disable=SC1090
 [ -f "$CONF" ] && . "$CONF"
 BUCKET="${BUCKET:-ject-db-backups}"
 PREFIX="${PREFIX:-postgres/prod}"
@@ -24,8 +25,16 @@ oci_() { "$OCI" --auth instance_principal "$@"; }
 finish() {
   local rc=$? result=success
   [ $rc -eq 0 ] || result=failed
-  docker rm -f "$NAME" >/dev/null 2>&1 || true
-  rm -rf "$WORK"
+  # 이미 없는 컨테이너만 정상으로 취급한다. daemon/제거 실패는 성공으로 숨기지 않는다.
+  if ! docker rm -fv "$NAME" >/dev/null 2>&1; then
+    local remaining
+    if ! remaining=$(docker container ls -aq --filter "name=^/${NAME}$" 2>/dev/null) || [ -n "$remaining" ]; then
+      rc=1; result=failed; STAGE=cleanup; DETAIL="container cleanup failed"
+    fi
+  fi
+  if ! rm -rf "$WORK"; then
+    rc=1; result=failed; STAGE=cleanup; DETAIL="temporary files cleanup failed"
+  fi
   local json
   json=$(printf '{"run_id":"%s","result":"%s","stage":"%s","duration_s":%d,"time":"%s","detail":"%s"}' \
     "${RUN_ID:-unknown}" "$result" "$STAGE" "$(( $(date +%s) - START ))" "$(date -Iseconds)" "$DETAIL")
@@ -41,13 +50,15 @@ trap finish EXIT
 NAMESPACE="${NAMESPACE:-$(oci_ os ns get --query data --raw-output)}"
 
 STAGE=select
+[[ "$PREFIX" =~ ^[A-Za-z0-9_-]+(/[A-Za-z0-9_-]+)*$ ]] || { DETAIL="invalid backup prefix"; exit 1; }
 if [ "$TARGET" = latest ]; then
   RUN_ID=$(oci_ os object list -ns "$NAMESPACE" -bn "$BUCKET" --prefix "$PREFIX/" --all --fields name \
-    | python3 -c 'import sys,json
+    | python3 -c 'import sys,json,re
 names=[o["name"] for o in json.load(sys.stdin).get("data",[])]
-runs=sorted({n.split("/")[-2] for n in names if n.endswith("/MANIFEST.json")})
-print(runs[-1] if runs else "")')
+runs=sorted({n.split("/")[-2] for n in names if re.fullmatch(re.escape(sys.argv[1])+r"/[0-9]{8}T[0-9]{6}Z/MANIFEST\.json", n)})
+print(runs[-1] if runs else "")' "$PREFIX")
 else
+  [[ "$TARGET" =~ ^[0-9]{8}T[0-9]{6}Z$ ]] || { DETAIL="invalid backup run id"; exit 1; }
   RUN_ID="$TARGET"
 fi
 [ -n "$RUN_ID" ] || { DETAIL="성공한 백업 없음"; exit 1; }
@@ -60,57 +71,110 @@ M="$D/MANIFEST.json"
 [ -s "$M" ] || { DETAIL="MANIFEST 없음"; exit 1; }
 
 STAGE=checksum
-python3 - "$D" <<'PY'
-import hashlib, json, sys, os
-d = sys.argv[1]
-m = json.load(open(os.path.join(d, "MANIFEST.json")))
-files = [m["globals"]] + m["databases"]
-for f in files:
-    h = hashlib.sha256(open(os.path.join(d, f["file"]), "rb").read()).hexdigest()
-    if h != f["sha256"]:
-        sys.exit(f"checksum mismatch: {f['file']}")
+python3 -I - "$D" <<'PY'
+import hashlib, json, sys, re
+from pathlib import Path
+d = Path(sys.argv[1])
+try:
+    assert not (d / "MANIFEST.json").is_symlink()
+    m = json.loads((d / "MANIFEST.json").read_text())
+    assert m["globals"]["file"] == "globals.sql"
+    assert isinstance(m["databases"], list) and m["databases"]
+    files = [m["globals"]] + m["databases"]
+    seen_files, seen_names = set(), set()
+    for entry in m["databases"]:
+        name = entry["name"]
+        assert isinstance(name, str) and 0 < len(name.encode()) <= 63
+        assert not any(ord(c) < 32 for c in name)
+        assert name not in seen_names and name not in ("template0", "template1")
+        seen_names.add(name)
+        assert re.fullmatch(r"db[0-9]+\.dump", entry["file"])
+        assert isinstance(entry["tables"], dict)
+        assert all(type(v) is int and v >= 0 for v in entry["tables"].values())
+    for entry in files:
+        filename = entry["file"]
+        assert filename not in seen_files
+        seen_files.add(filename)
+        path = d / filename
+        assert path.is_file() and not path.is_symlink()
+        assert re.fullmatch(r"[0-9a-f]{64}", entry["sha256"])
+        h = hashlib.sha256()
+        with path.open("rb") as stream:
+            for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                h.update(chunk)
+        assert h.hexdigest() == entry["sha256"]
+except (AssertionError, KeyError, TypeError, ValueError, OSError):
+    sys.exit("invalid manifest or backup checksum")
 PY
 
 STAGE=start
 PW="$(head -c 24 /dev/urandom | base64 | tr -dc A-Za-z0-9)"
+# PG17 GRANTED BY는 원 bootstrap 역할의 OID 의미에 의존한다.
+# 원본은 보존하고 이미 초기화된 관리자 생성문 하나만 검증 후 제외한다.
+RESTORE_USER=ject_admin
+python3 - "$D/globals.sql" "$WORK/restore-globals.sql" <<'PYGLOBALS'
+import pathlib, sys
+lines = pathlib.Path(sys.argv[1]).read_bytes().splitlines(keepends=True)
+matching = [i for i, line in enumerate(lines) if line.rstrip(b"\r\n") == b"CREATE ROLE ject_admin;"]
+if len(matching) != 1:
+    sys.exit("expected exactly one bootstrap role declaration")
+del lines[matching[0]]
+with open(sys.argv[2], "xb") as stream:
+    stream.write(b"".join(lines))
+PYGLOBALS
 docker run -d --name "$NAME" --network none --memory 768m \
-  -e POSTGRES_USER=ject_admin -e POSTGRES_PASSWORD="$PW" -e POSTGRES_DB=postgres \
-  -v "$D":/restore:ro "$PG_IMAGE" >/dev/null
-for i in $(seq 1 60); do
-  docker exec "$NAME" pg_isready -U ject_admin -d postgres -h 127.0.0.1 -q && break
+  -e POSTGRES_USER="$RESTORE_USER" -e POSTGRES_PASSWORD="$PW" -e POSTGRES_DB=postgres \
+  -v "$D":/restore:ro -v "$WORK/restore-globals.sql":/restore-globals.sql:ro "$PG_IMAGE" >/dev/null
+for _ in $(seq 1 60); do
+  docker exec "$NAME" pg_isready -U "$RESTORE_USER" -d postgres -h 127.0.0.1 -q && break
   sleep 2
 done
-docker exec "$NAME" pg_isready -U ject_admin -d postgres -h 127.0.0.1 -q
+docker exec "$NAME" pg_isready -U "$RESTORE_USER" -d postgres -h 127.0.0.1 -q
 
+STAGE=restore-globals
+# SQL/접속 오류를 실패로 전파한다. SQL·비밀번호가 포함될 수 있는 원문 오류는 출력하지 않는다.
+if ! docker exec "$NAME" psql -U "$RESTORE_USER" -d postgres -qX -v ON_ERROR_STOP=1 -f /restore-globals.sql >/dev/null 2>&1; then
+  DETAIL="globals restore failed"
+  exit 1
+fi
 STAGE=restore
-# 역할 생성: 이미 있는 관리자 역할 오류는 무시하고 나머지는 적용
-docker exec "$NAME" psql -U ject_admin -d postgres -q -f /restore/globals.sql > /dev/null 2>&1 || true
 mapfile -t ROWS < <(python3 -c 'import json,sys
 for d in json.load(open(sys.argv[1]))["databases"]: print(d["file"] + "\t" + d["name"])' "$M")
 for row in "${ROWS[@]}"; do
-  file="${row%%$'\t'*}"; db="${row#*$'\t'}"
-  if [ "$db" != postgres ]; then
-    echo 'CREATE DATABASE :"db";' | docker exec -i "$NAME" psql -U ject_admin -d postgres -qAtX -v ON_ERROR_STOP=1 -v db="$db" > /dev/null
+  file="${row%%$'\t'*}"
+  # template1은 백업 대상에서 제외된다. --create는 archive의 원 DB 이름/소유권/ACL을 복원한다.
+  if ! docker exec "$NAME" pg_restore -U "$RESTORE_USER" -d template1 \
+      --create --clean --if-exists --exit-on-error "/restore/$file" >/dev/null 2>&1; then
+    DETAIL="database restore failed"
+    exit 1
   fi
-  docker exec "$NAME" pg_restore -U ject_admin -d "$db" --exit-on-error --no-owner --role=ject_admin "/restore/$file"
 done
 
 STAGE=compare
-python3 - "$M" "$NAME" <<'PY'
-import json, subprocess, sys
+python3 - "$M" "$NAME" "$RESTORE_USER" <<'PY'
+import json, subprocess, sys, re
 m = json.load(open(sys.argv[1])); name = sys.argv[2]
+role = sys.argv[3]
+identifier = r'(?:[^\W\d][\w$]*|"(?:[^"\x00-\x1f]|"")+")'
+qualified = re.compile(identifier + r"\." + identifier)
+def connection(db):
+    return "dbname='" + db.replace("\\", "\\\\").replace("'", "\\'") + "' host='/var/run/postgresql'"
 bad = []
 total = 0
 for d in m["databases"]:
     for table, expected in d["tables"].items():
-        out = subprocess.run(["docker", "exec", name, "psql", "-U", "ject_admin", "-d", d["name"], "-AtqX",
+        if not qualified.fullmatch(table):
+            sys.exit("invalid table identifier")
+        out = subprocess.run(["docker", "exec", name, "psql", "-U", role, "-d", connection(d["name"]), "-AtqX",
                               "-c", f"SELECT count(*) FROM {table}"], capture_output=True, text=True)
+        if out.returncode != 0:
+            sys.exit("row count query failed")
         got = int(out.stdout.strip() or -1)
         total += 1
         if got != expected:
             bad.append(f"{d['name']}:{table} {got}!={expected}")
 if bad:
-    sys.exit("row count mismatch: " + "; ".join(bad[:10]))
+    sys.exit("row count mismatch")
 print(f"tables verified: {total}")
 PY
 DETAIL="databases=$(python3 -c 'import json,sys;print(len(json.load(open(sys.argv[1]))["databases"]))' "$M")"

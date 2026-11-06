@@ -1,0 +1,12 @@
+[Unit]
+Description=Bounded local storage for JECT development Tempo
+Before=ject-otel.service
+
+[Mount]
+What=/srv/ject/observability/tempo.ext4
+Where=/srv/ject/observability/tempo
+Type=ext4
+Options=loop,nodev,nosuid,noexec
+
+[Install]
+WantedBy=multi-user.target

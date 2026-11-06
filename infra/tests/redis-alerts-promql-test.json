@@ -1,0 +1,704 @@
+{
+  "evaluation_interval": "30s",
+  "tests": [
+    {
+      "name": "정상",
+      "interval": "30s",
+      "input_series": [
+        {
+          "series": "redis_memory_used_bytes{host=\"dev\",job=\"integrations/redis\"}",
+          "values": "80+0x4"
+        },
+        {
+          "series": "redis_memory_max_bytes{host=\"dev\",job=\"integrations/redis\"}",
+          "values": "100+0x4"
+        },
+        {
+          "series": "redis_up{host=\"dev\",job=\"integrations/redis\"}",
+          "values": "1+0x4"
+        },
+        {
+          "series": "up{host=\"dev\",job=\"integrations/redis\"}",
+          "values": "1+0x4"
+        }
+      ],
+      "promql_expr_test": [
+        {
+          "expr": "count(((redis_memory_used_bytes{job=\"integrations/redis\",host=~\"dev\"} / redis_memory_max_bytes{job=\"integrations/redis\",host=~\"dev\"}) and (redis_memory_max_bytes{job=\"integrations/redis\",host=~\"dev\"} > 0)) > 0.8) or vector(0)",
+          "eval_time": "1m",
+          "exp_samples": [
+            {
+              "labels": "{}",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "expr": "count((redis_up{job=\"integrations/redis\",host=~\"dev\"}) < 1) or vector(0)",
+          "eval_time": "1m",
+          "exp_samples": [
+            {
+              "labels": "{}",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "expr": "count(((label_replace(vector(1), \"host\", \"dev\", \"\", \"\")) unless on(host) (((up{job=\"integrations/redis\",host=~\"dev\"} == 1) and (time() - timestamp(up{job=\"integrations/redis\",host=~\"dev\"}) < 120)) and on(host) ((redis_up{job=\"integrations/redis\",host=~\"dev\"} >= 0) and (time() - timestamp(redis_up{job=\"integrations/redis\",host=~\"dev\"}) < 120)))) > 0) or vector(0)",
+          "eval_time": "1m",
+          "exp_samples": [
+            {
+              "labels": "{}",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "expr": "count((redis_memory_max_bytes{job=\"integrations/redis\",host=~\"dev\"} == 0) < 1) or vector(0)",
+          "eval_time": "1m",
+          "exp_samples": [
+            {
+              "labels": "{}",
+              "value": 0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "80퍼센트초과",
+      "interval": "30s",
+      "input_series": [
+        {
+          "series": "redis_memory_used_bytes{host=\"dev\",job=\"integrations/redis\"}",
+          "values": "81+0x4"
+        },
+        {
+          "series": "redis_memory_max_bytes{host=\"dev\",job=\"integrations/redis\"}",
+          "values": "100+0x4"
+        },
+        {
+          "series": "redis_up{host=\"dev\",job=\"integrations/redis\"}",
+          "values": "1+0x4"
+        },
+        {
+          "series": "up{host=\"dev\",job=\"integrations/redis\"}",
+          "values": "1+0x4"
+        }
+      ],
+      "promql_expr_test": [
+        {
+          "expr": "count(((redis_memory_used_bytes{job=\"integrations/redis\",host=~\"dev\"} / redis_memory_max_bytes{job=\"integrations/redis\",host=~\"dev\"}) and (redis_memory_max_bytes{job=\"integrations/redis\",host=~\"dev\"} > 0)) > 0.8) or vector(0)",
+          "eval_time": "1m",
+          "exp_samples": [
+            {
+              "labels": "{}",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "expr": "count((redis_up{job=\"integrations/redis\",host=~\"dev\"}) < 1) or vector(0)",
+          "eval_time": "1m",
+          "exp_samples": [
+            {
+              "labels": "{}",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "expr": "count(((label_replace(vector(1), \"host\", \"dev\", \"\", \"\")) unless on(host) (((up{job=\"integrations/redis\",host=~\"dev\"} == 1) and (time() - timestamp(up{job=\"integrations/redis\",host=~\"dev\"}) < 120)) and on(host) ((redis_up{job=\"integrations/redis\",host=~\"dev\"} >= 0) and (time() - timestamp(redis_up{job=\"integrations/redis\",host=~\"dev\"}) < 120)))) > 0) or vector(0)",
+          "eval_time": "1m",
+          "exp_samples": [
+            {
+              "labels": "{}",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "expr": "count((redis_memory_max_bytes{job=\"integrations/redis\",host=~\"dev\"} == 0) < 1) or vector(0)",
+          "eval_time": "1m",
+          "exp_samples": [
+            {
+              "labels": "{}",
+              "value": 0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "상한0",
+      "interval": "30s",
+      "input_series": [
+        {
+          "series": "redis_memory_used_bytes{host=\"dev\",job=\"integrations/redis\"}",
+          "values": "80+0x4"
+        },
+        {
+          "series": "redis_memory_max_bytes{host=\"dev\",job=\"integrations/redis\"}",
+          "values": "0+0x4"
+        },
+        {
+          "series": "redis_up{host=\"dev\",job=\"integrations/redis\"}",
+          "values": "1+0x4"
+        },
+        {
+          "series": "up{host=\"dev\",job=\"integrations/redis\"}",
+          "values": "1+0x4"
+        }
+      ],
+      "promql_expr_test": [
+        {
+          "expr": "count(((redis_memory_used_bytes{job=\"integrations/redis\",host=~\"dev\"} / redis_memory_max_bytes{job=\"integrations/redis\",host=~\"dev\"}) and (redis_memory_max_bytes{job=\"integrations/redis\",host=~\"dev\"} > 0)) > 0.8) or vector(0)",
+          "eval_time": "1m",
+          "exp_samples": [
+            {
+              "labels": "{}",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "expr": "count((redis_up{job=\"integrations/redis\",host=~\"dev\"}) < 1) or vector(0)",
+          "eval_time": "1m",
+          "exp_samples": [
+            {
+              "labels": "{}",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "expr": "count(((label_replace(vector(1), \"host\", \"dev\", \"\", \"\")) unless on(host) (((up{job=\"integrations/redis\",host=~\"dev\"} == 1) and (time() - timestamp(up{job=\"integrations/redis\",host=~\"dev\"}) < 120)) and on(host) ((redis_up{job=\"integrations/redis\",host=~\"dev\"} >= 0) and (time() - timestamp(redis_up{job=\"integrations/redis\",host=~\"dev\"}) < 120)))) > 0) or vector(0)",
+          "eval_time": "1m",
+          "exp_samples": [
+            {
+              "labels": "{}",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "expr": "count((redis_memory_max_bytes{job=\"integrations/redis\",host=~\"dev\"} == 0) < 1) or vector(0)",
+          "eval_time": "1m",
+          "exp_samples": [
+            {
+              "labels": "{}",
+              "value": 1
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "redis_up0",
+      "interval": "30s",
+      "input_series": [
+        {
+          "series": "redis_memory_used_bytes{host=\"dev\",job=\"integrations/redis\"}",
+          "values": "80+0x4"
+        },
+        {
+          "series": "redis_memory_max_bytes{host=\"dev\",job=\"integrations/redis\"}",
+          "values": "100+0x4"
+        },
+        {
+          "series": "redis_up{host=\"dev\",job=\"integrations/redis\"}",
+          "values": "0+0x4"
+        },
+        {
+          "series": "up{host=\"dev\",job=\"integrations/redis\"}",
+          "values": "1+0x4"
+        }
+      ],
+      "promql_expr_test": [
+        {
+          "expr": "count(((redis_memory_used_bytes{job=\"integrations/redis\",host=~\"dev\"} / redis_memory_max_bytes{job=\"integrations/redis\",host=~\"dev\"}) and (redis_memory_max_bytes{job=\"integrations/redis\",host=~\"dev\"} > 0)) > 0.8) or vector(0)",
+          "eval_time": "1m",
+          "exp_samples": [
+            {
+              "labels": "{}",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "expr": "count((redis_up{job=\"integrations/redis\",host=~\"dev\"}) < 1) or vector(0)",
+          "eval_time": "1m",
+          "exp_samples": [
+            {
+              "labels": "{}",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "expr": "count(((label_replace(vector(1), \"host\", \"dev\", \"\", \"\")) unless on(host) (((up{job=\"integrations/redis\",host=~\"dev\"} == 1) and (time() - timestamp(up{job=\"integrations/redis\",host=~\"dev\"}) < 120)) and on(host) ((redis_up{job=\"integrations/redis\",host=~\"dev\"} >= 0) and (time() - timestamp(redis_up{job=\"integrations/redis\",host=~\"dev\"}) < 120)))) > 0) or vector(0)",
+          "eval_time": "1m",
+          "exp_samples": [
+            {
+              "labels": "{}",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "expr": "count((redis_memory_max_bytes{job=\"integrations/redis\",host=~\"dev\"} == 0) < 1) or vector(0)",
+          "eval_time": "1m",
+          "exp_samples": [
+            {
+              "labels": "{}",
+              "value": 0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "up0",
+      "interval": "30s",
+      "input_series": [
+        {
+          "series": "redis_memory_used_bytes{host=\"dev\",job=\"integrations/redis\"}",
+          "values": "80+0x4"
+        },
+        {
+          "series": "redis_memory_max_bytes{host=\"dev\",job=\"integrations/redis\"}",
+          "values": "100+0x4"
+        },
+        {
+          "series": "redis_up{host=\"dev\",job=\"integrations/redis\"}",
+          "values": "1+0x4"
+        },
+        {
+          "series": "up{host=\"dev\",job=\"integrations/redis\"}",
+          "values": "0+0x4"
+        }
+      ],
+      "promql_expr_test": [
+        {
+          "expr": "count(((redis_memory_used_bytes{job=\"integrations/redis\",host=~\"dev\"} / redis_memory_max_bytes{job=\"integrations/redis\",host=~\"dev\"}) and (redis_memory_max_bytes{job=\"integrations/redis\",host=~\"dev\"} > 0)) > 0.8) or vector(0)",
+          "eval_time": "1m",
+          "exp_samples": [
+            {
+              "labels": "{}",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "expr": "count((redis_up{job=\"integrations/redis\",host=~\"dev\"}) < 1) or vector(0)",
+          "eval_time": "1m",
+          "exp_samples": [
+            {
+              "labels": "{}",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "expr": "count(((label_replace(vector(1), \"host\", \"dev\", \"\", \"\")) unless on(host) (((up{job=\"integrations/redis\",host=~\"dev\"} == 1) and (time() - timestamp(up{job=\"integrations/redis\",host=~\"dev\"}) < 120)) and on(host) ((redis_up{job=\"integrations/redis\",host=~\"dev\"} >= 0) and (time() - timestamp(redis_up{job=\"integrations/redis\",host=~\"dev\"}) < 120)))) > 0) or vector(0)",
+          "eval_time": "1m",
+          "exp_samples": [
+            {
+              "labels": "{}",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "expr": "count((redis_memory_max_bytes{job=\"integrations/redis\",host=~\"dev\"} == 0) < 1) or vector(0)",
+          "eval_time": "1m",
+          "exp_samples": [
+            {
+              "labels": "{}",
+              "value": 0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "둘다부재",
+      "interval": "30s",
+      "input_series": [],
+      "promql_expr_test": [
+        {
+          "expr": "count(((redis_memory_used_bytes{job=\"integrations/redis\",host=~\"dev\"} / redis_memory_max_bytes{job=\"integrations/redis\",host=~\"dev\"}) and (redis_memory_max_bytes{job=\"integrations/redis\",host=~\"dev\"} > 0)) > 0.8) or vector(0)",
+          "eval_time": "1m",
+          "exp_samples": [
+            {
+              "labels": "{}",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "expr": "count((redis_up{job=\"integrations/redis\",host=~\"dev\"}) < 1) or vector(0)",
+          "eval_time": "1m",
+          "exp_samples": [
+            {
+              "labels": "{}",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "expr": "count(((label_replace(vector(1), \"host\", \"dev\", \"\", \"\")) unless on(host) (((up{job=\"integrations/redis\",host=~\"dev\"} == 1) and (time() - timestamp(up{job=\"integrations/redis\",host=~\"dev\"}) < 120)) and on(host) ((redis_up{job=\"integrations/redis\",host=~\"dev\"} >= 0) and (time() - timestamp(redis_up{job=\"integrations/redis\",host=~\"dev\"}) < 120)))) > 0) or vector(0)",
+          "eval_time": "1m",
+          "exp_samples": [
+            {
+              "labels": "{}",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "expr": "count((redis_memory_max_bytes{job=\"integrations/redis\",host=~\"dev\"} == 0) < 1) or vector(0)",
+          "eval_time": "1m",
+          "exp_samples": [
+            {
+              "labels": "{}",
+              "value": 0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "up정상_redis_up부재",
+      "interval": "30s",
+      "input_series": [
+        {
+          "series": "redis_memory_used_bytes{host=\"dev\",job=\"integrations/redis\"}",
+          "values": "80+0x4"
+        },
+        {
+          "series": "redis_memory_max_bytes{host=\"dev\",job=\"integrations/redis\"}",
+          "values": "100+0x4"
+        },
+        {
+          "series": "up{host=\"dev\",job=\"integrations/redis\"}",
+          "values": "1+0x4"
+        }
+      ],
+      "promql_expr_test": [
+        {
+          "expr": "count(((redis_memory_used_bytes{job=\"integrations/redis\",host=~\"dev\"} / redis_memory_max_bytes{job=\"integrations/redis\",host=~\"dev\"}) and (redis_memory_max_bytes{job=\"integrations/redis\",host=~\"dev\"} > 0)) > 0.8) or vector(0)",
+          "eval_time": "1m",
+          "exp_samples": [
+            {
+              "labels": "{}",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "expr": "count((redis_up{job=\"integrations/redis\",host=~\"dev\"}) < 1) or vector(0)",
+          "eval_time": "1m",
+          "exp_samples": [
+            {
+              "labels": "{}",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "expr": "count(((label_replace(vector(1), \"host\", \"dev\", \"\", \"\")) unless on(host) (((up{job=\"integrations/redis\",host=~\"dev\"} == 1) and (time() - timestamp(up{job=\"integrations/redis\",host=~\"dev\"}) < 120)) and on(host) ((redis_up{job=\"integrations/redis\",host=~\"dev\"} >= 0) and (time() - timestamp(redis_up{job=\"integrations/redis\",host=~\"dev\"}) < 120)))) > 0) or vector(0)",
+          "eval_time": "1m",
+          "exp_samples": [
+            {
+              "labels": "{}",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "expr": "count((redis_memory_max_bytes{job=\"integrations/redis\",host=~\"dev\"} == 0) < 1) or vector(0)",
+          "eval_time": "1m",
+          "exp_samples": [
+            {
+              "labels": "{}",
+              "value": 0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "120초_stale",
+      "interval": "30s",
+      "input_series": [
+        {
+          "series": "redis_memory_used_bytes{host=\"dev\",job=\"integrations/redis\"}",
+          "values": "80"
+        },
+        {
+          "series": "redis_memory_max_bytes{host=\"dev\",job=\"integrations/redis\"}",
+          "values": "100"
+        },
+        {
+          "series": "redis_up{host=\"dev\",job=\"integrations/redis\"}",
+          "values": "1"
+        },
+        {
+          "series": "up{host=\"dev\",job=\"integrations/redis\"}",
+          "values": "1"
+        }
+      ],
+      "promql_expr_test": [
+        {
+          "expr": "count(((redis_memory_used_bytes{job=\"integrations/redis\",host=~\"dev\"} / redis_memory_max_bytes{job=\"integrations/redis\",host=~\"dev\"}) and (redis_memory_max_bytes{job=\"integrations/redis\",host=~\"dev\"} > 0)) > 0.8) or vector(0)",
+          "eval_time": "2m",
+          "exp_samples": [
+            {
+              "labels": "{}",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "expr": "count((redis_up{job=\"integrations/redis\",host=~\"dev\"}) < 1) or vector(0)",
+          "eval_time": "2m",
+          "exp_samples": [
+            {
+              "labels": "{}",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "expr": "count(((label_replace(vector(1), \"host\", \"dev\", \"\", \"\")) unless on(host) (((up{job=\"integrations/redis\",host=~\"dev\"} == 1) and (time() - timestamp(up{job=\"integrations/redis\",host=~\"dev\"}) < 120)) and on(host) ((redis_up{job=\"integrations/redis\",host=~\"dev\"} >= 0) and (time() - timestamp(redis_up{job=\"integrations/redis\",host=~\"dev\"}) < 120)))) > 0) or vector(0)",
+          "eval_time": "2m",
+          "exp_samples": [
+            {
+              "labels": "{}",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "expr": "count((redis_memory_max_bytes{job=\"integrations/redis\",host=~\"dev\"} == 0) < 1) or vector(0)",
+          "eval_time": "2m",
+          "exp_samples": [
+            {
+              "labels": "{}",
+              "value": 0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "대상외_host",
+      "interval": "30s",
+      "input_series": [
+        {
+          "series": "redis_memory_used_bytes{host=\"other\",job=\"integrations/redis\"}",
+          "values": "81+0x4"
+        },
+        {
+          "series": "redis_memory_max_bytes{host=\"other\",job=\"integrations/redis\"}",
+          "values": "0+0x4"
+        },
+        {
+          "series": "redis_up{host=\"other\",job=\"integrations/redis\"}",
+          "values": "0+0x4"
+        },
+        {
+          "series": "up{host=\"other\",job=\"integrations/redis\"}",
+          "values": "0+0x4"
+        },
+        {
+          "series": "redis_memory_used_bytes{host=\"dev\",job=\"integrations/redis\"}",
+          "values": "80+0x4"
+        },
+        {
+          "series": "redis_memory_max_bytes{host=\"dev\",job=\"integrations/redis\"}",
+          "values": "100+0x4"
+        },
+        {
+          "series": "redis_up{host=\"dev\",job=\"integrations/redis\"}",
+          "values": "1+0x4"
+        },
+        {
+          "series": "up{host=\"dev\",job=\"integrations/redis\"}",
+          "values": "1+0x4"
+        }
+      ],
+      "promql_expr_test": [
+        {
+          "expr": "count(((redis_memory_used_bytes{job=\"integrations/redis\",host=~\"dev\"} / redis_memory_max_bytes{job=\"integrations/redis\",host=~\"dev\"}) and (redis_memory_max_bytes{job=\"integrations/redis\",host=~\"dev\"} > 0)) > 0.8) or vector(0)",
+          "eval_time": "1m",
+          "exp_samples": [
+            {
+              "labels": "{}",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "expr": "count((redis_up{job=\"integrations/redis\",host=~\"dev\"}) < 1) or vector(0)",
+          "eval_time": "1m",
+          "exp_samples": [
+            {
+              "labels": "{}",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "expr": "count(((label_replace(vector(1), \"host\", \"dev\", \"\", \"\")) unless on(host) (((up{job=\"integrations/redis\",host=~\"dev\"} == 1) and (time() - timestamp(up{job=\"integrations/redis\",host=~\"dev\"}) < 120)) and on(host) ((redis_up{job=\"integrations/redis\",host=~\"dev\"} >= 0) and (time() - timestamp(redis_up{job=\"integrations/redis\",host=~\"dev\"}) < 120)))) > 0) or vector(0)",
+          "eval_time": "1m",
+          "exp_samples": [
+            {
+              "labels": "{}",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "expr": "count((redis_memory_max_bytes{job=\"integrations/redis\",host=~\"dev\"} == 0) < 1) or vector(0)",
+          "eval_time": "1m",
+          "exp_samples": [
+            {
+              "labels": "{}",
+              "value": 0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "up_단독120초_stale",
+      "interval": "30s",
+      "input_series": [
+        {
+          "series": "redis_memory_used_bytes{host=\"dev\",job=\"integrations/redis\"}",
+          "values": "80+0x4"
+        },
+        {
+          "series": "redis_memory_max_bytes{host=\"dev\",job=\"integrations/redis\"}",
+          "values": "100+0x4"
+        },
+        {
+          "series": "redis_up{host=\"dev\",job=\"integrations/redis\"}",
+          "values": "1+0x4"
+        },
+        {
+          "series": "up{host=\"dev\",job=\"integrations/redis\"}",
+          "values": "1"
+        }
+      ],
+      "promql_expr_test": [
+        {
+          "expr": "count(((redis_memory_used_bytes{job=\"integrations/redis\",host=~\"dev\"} / redis_memory_max_bytes{job=\"integrations/redis\",host=~\"dev\"}) and (redis_memory_max_bytes{job=\"integrations/redis\",host=~\"dev\"} > 0)) > 0.8) or vector(0)",
+          "eval_time": "2m",
+          "exp_samples": [
+            {
+              "labels": "{}",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "expr": "count((redis_up{job=\"integrations/redis\",host=~\"dev\"}) < 1) or vector(0)",
+          "eval_time": "2m",
+          "exp_samples": [
+            {
+              "labels": "{}",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "expr": "count(((label_replace(vector(1), \"host\", \"dev\", \"\", \"\")) unless on(host) (((up{job=\"integrations/redis\",host=~\"dev\"} == 1) and (time() - timestamp(up{job=\"integrations/redis\",host=~\"dev\"}) < 120)) and on(host) ((redis_up{job=\"integrations/redis\",host=~\"dev\"} >= 0) and (time() - timestamp(redis_up{job=\"integrations/redis\",host=~\"dev\"}) < 120)))) > 0) or vector(0)",
+          "eval_time": "2m",
+          "exp_samples": [
+            {
+              "labels": "{}",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "expr": "count((redis_memory_max_bytes{job=\"integrations/redis\",host=~\"dev\"} == 0) < 1) or vector(0)",
+          "eval_time": "2m",
+          "exp_samples": [
+            {
+              "labels": "{}",
+              "value": 0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "redis_up_단독120초_stale",
+      "interval": "30s",
+      "input_series": [
+        {
+          "series": "redis_memory_used_bytes{host=\"dev\",job=\"integrations/redis\"}",
+          "values": "80+0x4"
+        },
+        {
+          "series": "redis_memory_max_bytes{host=\"dev\",job=\"integrations/redis\"}",
+          "values": "100+0x4"
+        },
+        {
+          "series": "redis_up{host=\"dev\",job=\"integrations/redis\"}",
+          "values": "1"
+        },
+        {
+          "series": "up{host=\"dev\",job=\"integrations/redis\"}",
+          "values": "1+0x4"
+        }
+      ],
+      "promql_expr_test": [
+        {
+          "expr": "count(((redis_memory_used_bytes{job=\"integrations/redis\",host=~\"dev\"} / redis_memory_max_bytes{job=\"integrations/redis\",host=~\"dev\"}) and (redis_memory_max_bytes{job=\"integrations/redis\",host=~\"dev\"} > 0)) > 0.8) or vector(0)",
+          "eval_time": "2m",
+          "exp_samples": [
+            {
+              "labels": "{}",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "expr": "count((redis_up{job=\"integrations/redis\",host=~\"dev\"}) < 1) or vector(0)",
+          "eval_time": "2m",
+          "exp_samples": [
+            {
+              "labels": "{}",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "expr": "count(((label_replace(vector(1), \"host\", \"dev\", \"\", \"\")) unless on(host) (((up{job=\"integrations/redis\",host=~\"dev\"} == 1) and (time() - timestamp(up{job=\"integrations/redis\",host=~\"dev\"}) < 120)) and on(host) ((redis_up{job=\"integrations/redis\",host=~\"dev\"} >= 0) and (time() - timestamp(redis_up{job=\"integrations/redis\",host=~\"dev\"}) < 120)))) > 0) or vector(0)",
+          "eval_time": "2m",
+          "exp_samples": [
+            {
+              "labels": "{}",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "expr": "count((redis_memory_max_bytes{job=\"integrations/redis\",host=~\"dev\"} == 0) < 1) or vector(0)",
+          "eval_time": "2m",
+          "exp_samples": [
+            {
+              "labels": "{}",
+              "value": 0
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

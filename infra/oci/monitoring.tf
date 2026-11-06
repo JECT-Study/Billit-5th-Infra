@@ -18,6 +18,25 @@ resource "oci_ons_subscription" "alert_email" {
   freeform_tags  = local.tags
 }
 
+locals {
+  # 주소 원문은 sensitive로 유지하고 for_each에는 안정적인 해시 키만 사용한다.
+  # 기본값 []는 기존 개인 구독만 유지하며, 대소문자/앞뒤 공백 차이는 중복으로 취급한다.
+  additional_alert_email_endpoints = {
+    for email in toset([for address in var.additional_alert_emails : lower(trimspace(address))]) :
+    sha256(email) => email if email != "" && email != lower(trimspace(var.alert_email))
+  }
+}
+
+resource "oci_ons_subscription" "additional_alert_email" {
+  for_each = nonsensitive(toset(keys(local.additional_alert_email_endpoints)))
+
+  compartment_id = oci_identity_compartment.ject.id
+  topic_id       = oci_ons_notification_topic.alerts.id
+  protocol       = "EMAIL"
+  endpoint       = local.additional_alert_email_endpoints[each.key]
+  freeform_tags  = local.tags
+}
+
 # Grafana 알림은 개발 VM의 ject-alert-relay(127.0.0.1)가 인스턴스 주체로 이 주제에 발행한다.
 # Notifications 정책 조건에는 일반 변수만 쓸 수 있다(target.topic.id 불가 → 실측 404 NotAuthorizedOrNotFound).
 # 그래서 JECT 구역의 주제(ject-alerts 하나)에 "발행"만 허용한다. 구독 추가·변경(ONS_TOPIC_SUBSCRIBE 등)은 주지 않는다.

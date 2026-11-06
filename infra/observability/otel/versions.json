@@ -1,0 +1,20 @@
+{
+  "verified_at": "2026-11-06",
+  "javaagent": {
+    "version": "2.33.1",
+    "sha256": "e43a270df53c6f423e0ab157be9c27ccc01d5dc3232e162fe54777573db2f149",
+    "release": "https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases/tag/v2.33.1",
+    "status": "official checksum, JDK21 loading and local HttpClient/HttpServer automatic CLIENT/SERVER spans with matching propagated trace verified; Billit/Spring app compatibility not verified"
+  },
+  "tempo": {
+    "version": "3.1.1",
+    "image": "grafana/tempo:3.1.1",
+    "linux_arm64_digest": "sha256:ef71057012c3135fce32cc227fb027d69b94b8d387f581242916f449199febc8",
+    "release": "https://github.com/grafana/tempo/releases/tag/v3.1.1",
+    "status": "ARM64 binary version, config.verify=true, readiness, synthetic OTLP ingest and trace lookup verified; production/retention not verified"
+  },
+  "alloy": {
+    "version": "1.20.1",
+    "status": "synthetic sanitization and Tempo trace lookup verified; production resource limits and app integration not verified"
+  }
+}

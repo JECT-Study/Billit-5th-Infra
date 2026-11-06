@@ -1,0 +1,20 @@
+[Unit]
+Description=JECT development trace collector and Tempo
+Requires=docker.service
+After=docker.service
+RequiresMountsFor=/srv/ject/observability/tempo
+BindsTo=srv-ject-observability-tempo.mount
+StartLimitIntervalSec=60
+StartLimitBurst=3
+
+[Service]
+Type=simple
+ExecStartPre=/usr/bin/python3 /opt/ject/otel/preflight.py
+ExecStart=/usr/bin/docker compose -p ject-otel -f /opt/ject/compose/otel.yaml up --abort-on-container-exit
+ExecStop=/usr/bin/docker compose -p ject-otel -f /opt/ject/compose/otel.yaml stop --timeout 30
+Restart=always
+RestartSec=10
+TimeoutStopSec=60
+
+[Install]
+WantedBy=multi-user.target

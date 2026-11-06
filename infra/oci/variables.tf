@@ -48,3 +48,20 @@ variable "alert_email" {
   type        = string
   sensitive   = true
 }
+
+variable "additional_alert_emails" {
+  description = "추가 장애 알림 이메일. tfvars에만 저장. 앞뒤 공백·대소문자를 정규화하고 빈값·기존 alert_email 중복은 제외한다. 각 주소의 구독 확인이 필요하다."
+  type        = set(string)
+  default     = []
+  nullable    = false
+  sensitive   = true
+
+  validation {
+    condition = alltrue([
+      for email in var.additional_alert_emails : email == null ? false : (
+        trimspace(email) == "" || can(regex("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$", trimspace(email)))
+      )
+    ])
+    error_message = "추가 이메일에는 빈 문자열 또는 공백 없는 이메일 주소를 지정해야 합니다. null 항목은 허용하지 않습니다."
+  }
+}
