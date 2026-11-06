@@ -44,14 +44,34 @@ class S3DevSmokeTests(unittest.TestCase):
 
     def test_only_one_development_object_is_written_and_deleted(self):
         payload = b'JECT development S3 synthetic validation\n'
-        responses = [(200,b'', ''), (200,payload,''), (404,b'',''), (403,b'','AccessDenied'),
+        responses = [(200,b'', ''), (200,payload,''), (200,b'',''), (403,b'','AccessDenied'),
+                     (404,b'',''), (403,b'','AccessDenied'),
                      (403,b'','AccessDenied'), (204,b'',''), (404,b'','NoSuchKey')]
         with patch.object(S,'request', side_effect=responses) as request:
             result=S.run(DATA)
         self.assertTrue(result['signed_delete_and_missing'])
+        self.assertTrue(result['signed_head'])
+        self.assertEqual(result['expired_signed_get_denied']['status'], 403)
         mutations=[c for c in request.call_args_list if c.args[1] in ('PUT','DELETE')]
         self.assertEqual(len(mutations),2)
         self.assertTrue(all('/ject-dev-uploads/infra-validation/' in c.args[0] for c in mutations))
+
+    def test_expired_url_success_or_signature_error_is_not_accepted(self):
+        payload = b'JECT development S3 synthetic validation\n'
+        for status, code in ((200, ''), (403, 'SignatureDoesNotMatch')):
+            with self.subTest(status=status, code=code):
+                responses = [(200,b'',''), (200,payload,''), (200,b'',''),
+                             (status,b'',code), (204,b'',''), (404,b'','NoSuchKey')]
+                with patch.object(S, 'request', side_effect=responses) as request:
+                    with self.assertRaisesRegex(RuntimeError, 'expired'): S.run(DATA)
+                self.assertEqual([c.args[1] for c in request.call_args_list][-2:], ['DELETE', 'GET'])
+
+    def test_head_failure_cleans_the_synthetic_object(self):
+        responses = [(200,b'',''), (200,b'JECT development S3 synthetic validation\n',''),
+                     (403,b'','AccessDenied'), (204,b'',''), (404,b'','NoSuchKey')]
+        with patch.object(S, 'request', side_effect=responses) as request:
+            with self.assertRaisesRegex(RuntimeError, 'HEAD'): S.run(DATA)
+        self.assertEqual([c.args[1] for c in request.call_args_list][-2:], ['DELETE', 'GET'])
 
     def test_put_connection_loss_still_cleans_own_key(self):
         with patch.object(S, 'request', side_effect=[OSError('connection lost'),
