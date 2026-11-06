@@ -73,14 +73,14 @@ FE 저장소의 검사 작업이 성공한 뒤 공통 빌드를 호출한다. No
 build:
   needs: check
   permissions: { contents: read, packages: write }
-  uses: JECT-Study/Billit-5th-Infra/.github/workflows/build-arm64.yml@2c4523f36c3f2c0c223b7a3e1af9aa2421607abe
+  uses: JECT-Study/Billit-5th-Infra/.github/workflows/build-arm64.yml@84ec06d74e1826803cd008f6176dd109f57f745e
   with:
     image_name: ject-fe
 
 deploy-dev:
   needs: build
   permissions: { contents: read, packages: read, statuses: write }
-  uses: JECT-Study/Billit-5th-Infra/.github/workflows/deploy-via-bastion.yml@2c4523f36c3f2c0c223b7a3e1af9aa2421607abe
+  uses: JECT-Study/Billit-5th-Infra/.github/workflows/deploy-via-bastion.yml@84ec06d74e1826803cd008f6176dd109f57f745e
   with:
     environment: dev
     service: fe
