@@ -24,10 +24,12 @@ OCI CLI `iam user update-user-capabilities`의 `--can-use-db-credentials false`�
 python3 -B infra/tests/s3-dev-smoke.py --credentials .local/s3-dev/credentials.json
 ```
 
-시험은 `infra-validation/` 아래 무작위 객체 한 개만 생성한다. 서명 PUT/GET의 본문 해시,
+시험은 `infra-validation/` 아래 무작위 객체 한 개만 생성한다. 서명 PUT/GET의 본문 해시와 HEAD,
+5분 전 발급한 60초 유효 서명의 GET 거절(403 AccessDenied/RequestExpired),
 익명 GET 거부, 운영/백업 버킷 목록 거부를 확인하고 finally에서 생성 객체만 삭제한다.
 삭제 후 서명 GET 404까지 확인한다. 서명은 60초만 유효하며 HTTP redirect를 따르지 않는다.
 브라우저 CORS, multipart, 앱 통합, 보관 정책·업로드 크기/형식 정책의 검증은 포함하지 않는다.
+HEAD·만료 요청 거절 검사는 합성 회귀시험과 아래 실제 서비스 검증을 통과했다.
 
 IAM 전파로 권한 거부가 나면 최대 3회까지만 간격을 두고 재시도한다. 다른 오류는 원인을
 확인하기 전 반복하지 않는다. 실패 결과를 성공으로 표시하지 않으며, 정리 실패에는 해당
@@ -57,3 +59,11 @@ IAM 전파로 권한 거부가 나면 최대 3회까지만 간격을 두고 재�
 따라서 실제 PUT/GET/DELETE·익명/다른 버킷 거부 검증은 **아직 미완료**다.
 IAM 전파 지연 가능성은 추정이며 원인으로 확정하지 않는다. 키를 새로 만들거나 권한을
 늘려 우회하지 않는다. 단위시험은 경계·정리 동작을 확인하며 실제 연결 성공을 뜻하지 않는다.
+
+### 후속 실제 검증
+
+2026-11-07 재인증 후, 존재하지 않는 시험 객체 GET이404 NoSuchKey로 응답했다.
+이후 임시 객체 한 개의 PUT/GET 본문 일치·HEAD200·만료 서명403 AccessDenied·익명GET404,
+운영/백업 버킷 목록404 NoSuchBucket·삭제 후404를 확인했다. 시험기 종료0.
+계정 이메일은 미확인 상태였다. 초기 오류가 해소된 원인은 확정하지 않는다.
+CORS·multipart·실제 앱 연동·제품 보관정책은 여전히 미검증이다.

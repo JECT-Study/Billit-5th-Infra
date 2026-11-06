@@ -86,6 +86,15 @@ def run(data):
         if status != 200 or hashlib.sha256(content).digest() != hashlib.sha256(payload).digest():
             raise RuntimeError('signed GET/hash verification failed')
         result['signed_put_get_hash'] = True
+        status, _, _ = request(presign(data, 'HEAD', BUCKET, key), 'HEAD')
+        if status != 200:
+            raise RuntimeError('signed HEAD verification failed')
+        result['signed_head'] = True
+        expired_at = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(minutes=5)
+        status, _, code = request(presign(data, 'GET', BUCKET, key, now=expired_at), 'GET')
+        if status != 403 or code not in ('AccessDenied', 'RequestExpired'):
+            raise RuntimeError('expired signed GET was not rejected as expected')
+        result['expired_signed_get_denied'] = {'status': status, 'code': code}
         status, _, _ = request(data['endpoint'] + '/' + BUCKET + '/' + key, 'GET')
         if status not in (403, 404):
             raise RuntimeError('anonymous GET was not denied')
