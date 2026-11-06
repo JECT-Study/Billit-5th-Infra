@@ -58,6 +58,11 @@ class ComposeTests(unittest.TestCase):
         cls.config = json.loads(raw)
 
     def test_isolated_non_public_network_and_no_app_mounts(self):
+        # Compose 버전에 따라 정규화 JSON에서 false가 생략된다.
+        # 원본의 모든 mount에 명시된 false와 정규화한 의미를 함께 확인한다.
+        source = (ROOT / 'compose/otel.yaml').read_text()
+        self.assertEqual(source.count('bind: { create_host_path: false }'),
+                         sum(len(svc['volumes']) for svc in self.config['services'].values()))
         self.assertEqual(set(self.config['services']), {'tempo', 'collector', 'proxy'})
         self.assertTrue(self.config['networks']['traces']['internal'])
         self.assertNotIn('internal', self.config['networks']['ingress'])
@@ -70,7 +75,7 @@ class ComposeTests(unittest.TestCase):
             self.assertTrue(svc['read_only'])
             for port in svc.get('ports', []): self.assertEqual(port['host_ip'], '127.0.0.1')
             for mount in svc['volumes']:
-                self.assertFalse(mount['bind']['create_host_path'])
+                self.assertFalse(mount.get('bind', {}).get('create_host_path', False))
                 self.assertNotIn('docker.sock', mount['source'])
 
     def test_process_and_log_bounds(self):
