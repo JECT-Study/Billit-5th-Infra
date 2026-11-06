@@ -1,0 +1,20 @@
+# 선택 적용 overlay: agent.yaml과 함께 명시할 때만 사용. 단독 실행하지 않는다.
+# 실제 활성화 전 redis-README.md의 ACL/비밀/검증/복구 조건을 확인한다.
+services:
+  alloy:
+    environment:
+      JECT_REDIS_METRICS_ADDR: ${JECT_REDIS_METRICS_ADDR:?Redis 관측 주소 명시 필요}
+      JECT_REDIS_METRICS_USER: ${JECT_REDIS_METRICS_USER:?Redis 관측 사용자 명시 필요}
+    secrets:
+      - redis_metrics_password
+    volumes:
+      - type: bind
+        source: ${JECT_REDIS_METRICS_CONFIG_FILE:?검토한 Alloy 설정 파일 절대경로 필요}
+        target: /etc/alloy/redis.alloy
+        read_only: true
+        bind:
+          create_host_path: false
+
+secrets:
+  redis_metrics_password:
+    file: ${JECT_REDIS_METRICS_PASSWORD_FILE:?관측 비밀번호 파일 절대경로 필요}

@@ -1,0 +1,327 @@
+{
+  "evaluation_interval": "1m",
+  "tests": [
+    {
+      "name": "정상 두 대상",
+      "interval": "1m",
+      "input_series": [
+        {
+          "series": "probe_success{host=\"dev\",job=\"integrations/blackbox/dev\",target=\"dev\"}",
+          "values": "1x6"
+        },
+        {
+          "series": "probe_success{host=\"dev\",job=\"integrations/blackbox/prod\",target=\"prod\"}",
+          "values": "1x6"
+        }
+      ],
+      "promql_expr_test": [
+        {
+          "expr": "__PROBE_EXPR__",
+          "eval_time": "3m",
+          "exp_samples": [
+            {
+              "labels": "{target=\"dev\"}",
+              "value": 1
+            },
+            {
+              "labels": "{target=\"prod\"}",
+              "value": 1
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "개발 실패 운영 정상",
+      "interval": "1m",
+      "input_series": [
+        {
+          "series": "probe_success{host=\"dev\",job=\"integrations/blackbox/dev\",target=\"dev\"}",
+          "values": "0x6"
+        },
+        {
+          "series": "probe_success{host=\"dev\",job=\"integrations/blackbox/prod\",target=\"prod\"}",
+          "values": "1x6"
+        }
+      ],
+      "promql_expr_test": [
+        {
+          "expr": "__PROBE_EXPR__",
+          "eval_time": "3m",
+          "exp_samples": [
+            {
+              "labels": "{target=\"dev\"}",
+              "value": 0
+            },
+            {
+              "labels": "{target=\"prod\"}",
+              "value": 1
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "개발만 누락",
+      "interval": "1m",
+      "input_series": [
+        {
+          "series": "probe_success{host=\"dev\",job=\"integrations/blackbox/prod\",target=\"prod\"}",
+          "values": "1x6"
+        }
+      ],
+      "promql_expr_test": [
+        {
+          "expr": "__PROBE_EXPR__",
+          "eval_time": "3m",
+          "exp_samples": [
+            {
+              "labels": "{target=\"dev\"}",
+              "value": 0
+            },
+            {
+              "labels": "{target=\"prod\"}",
+              "value": 1
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "모두 누락과 범위 밖 제외",
+      "interval": "1m",
+      "input_series": [
+        {
+          "series": "probe_success{host=\"dev\",job=\"other\",target=\"dev\"}",
+          "values": "1x6"
+        },
+        {
+          "series": "probe_success{host=\"dev\",job=\"integrations/blackbox/outside\",target=\"outside\"}",
+          "values": "1x6"
+        },
+        {
+          "series": "probe_success{host=\"dev\",job=\"probe\",target=\"dev\"}",
+          "values": "1x6"
+        },
+        {
+          "series": "probe_success{host=\"other\",job=\"integrations/blackbox/prod\",target=\"prod\"}",
+          "values": "1x6"
+        }
+      ],
+      "promql_expr_test": [
+        {
+          "expr": "__PROBE_EXPR__",
+          "eval_time": "3m",
+          "exp_samples": [
+            {
+              "labels": "{target=\"dev\"}",
+              "value": 0
+            },
+            {
+              "labels": "{target=\"prod\"}",
+              "value": 0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "180초 신선도 경계",
+      "interval": "1m",
+      "input_series": [
+        {
+          "series": "probe_success{host=\"dev\",job=\"integrations/blackbox/dev\",target=\"dev\"}",
+          "values": "1 _x6"
+        },
+        {
+          "series": "probe_success{host=\"dev\",job=\"integrations/blackbox/prod\",target=\"prod\"}",
+          "values": "1x6"
+        }
+      ],
+      "promql_expr_test": [
+        {
+          "expr": "__PROBE_EXPR__",
+          "eval_time": "2m",
+          "exp_samples": [
+            {
+              "labels": "{target=\"dev\"}",
+              "value": 1
+            },
+            {
+              "labels": "{target=\"prod\"}",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "expr": "__PROBE_EXPR__",
+          "eval_time": "3m",
+          "exp_samples": [
+            {
+              "labels": "{target=\"dev\"}",
+              "value": 0
+            },
+            {
+              "labels": "{target=\"prod\"}",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "expr": "__PROBE_EXPR__",
+          "eval_time": "4m",
+          "exp_samples": [
+            {
+              "labels": "{target=\"dev\"}",
+              "value": 0
+            },
+            {
+              "labels": "{target=\"prod\"}",
+              "value": 1
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Prometheus stale 마커",
+      "interval": "1m",
+      "input_series": [
+        {
+          "series": "probe_success{host=\"dev\",job=\"integrations/blackbox/dev\",target=\"dev\"}",
+          "values": "1 stale"
+        }
+      ],
+      "promql_expr_test": [
+        {
+          "expr": "__PROBE_EXPR__",
+          "eval_time": "2m",
+          "exp_samples": [
+            {
+              "labels": "{target=\"dev\"}",
+              "value": 0
+            },
+            {
+              "labels": "{target=\"prod\"}",
+              "value": 0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "운영 대상 대칭 검증: 개발 실패 운영 정상",
+      "interval": "1m",
+      "input_series": [
+        {
+          "series": "probe_success{host=\"dev\",job=\"integrations/blackbox/prod\",target=\"prod\"}",
+          "values": "0x6"
+        },
+        {
+          "series": "probe_success{host=\"dev\",job=\"integrations/blackbox/dev\",target=\"dev\"}",
+          "values": "1x6"
+        }
+      ],
+      "promql_expr_test": [
+        {
+          "expr": "__PROBE_EXPR__",
+          "eval_time": "3m",
+          "exp_samples": [
+            {
+              "labels": "{target=\"prod\"}",
+              "value": 0
+            },
+            {
+              "labels": "{target=\"dev\"}",
+              "value": 1
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "운영 대상 대칭 검증: 개발만 누락",
+      "interval": "1m",
+      "input_series": [
+        {
+          "series": "probe_success{host=\"dev\",job=\"integrations/blackbox/dev\",target=\"dev\"}",
+          "values": "1x6"
+        }
+      ],
+      "promql_expr_test": [
+        {
+          "expr": "__PROBE_EXPR__",
+          "eval_time": "3m",
+          "exp_samples": [
+            {
+              "labels": "{target=\"prod\"}",
+              "value": 0
+            },
+            {
+              "labels": "{target=\"dev\"}",
+              "value": 1
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "운영 대상 대칭 검증: 180초 신선도 경계",
+      "interval": "1m",
+      "input_series": [
+        {
+          "series": "probe_success{host=\"dev\",job=\"integrations/blackbox/prod\",target=\"prod\"}",
+          "values": "1 _x6"
+        },
+        {
+          "series": "probe_success{host=\"dev\",job=\"integrations/blackbox/dev\",target=\"dev\"}",
+          "values": "1x6"
+        }
+      ],
+      "promql_expr_test": [
+        {
+          "expr": "__PROBE_EXPR__",
+          "eval_time": "2m",
+          "exp_samples": [
+            {
+              "labels": "{target=\"prod\"}",
+              "value": 1
+            },
+            {
+              "labels": "{target=\"dev\"}",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "expr": "__PROBE_EXPR__",
+          "eval_time": "3m",
+          "exp_samples": [
+            {
+              "labels": "{target=\"prod\"}",
+              "value": 0
+            },
+            {
+              "labels": "{target=\"dev\"}",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "expr": "__PROBE_EXPR__",
+          "eval_time": "4m",
+          "exp_samples": [
+            {
+              "labels": "{target=\"prod\"}",
+              "value": 0
+            },
+            {
+              "labels": "{target=\"dev\"}",
+              "value": 1
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

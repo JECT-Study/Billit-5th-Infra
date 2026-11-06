@@ -105,16 +105,61 @@ RULES = {
              "월간 백업 복원 시험이 실패했습니다",
              "운영 데이터 VM: sudo cat /srv/ject/backup-status/restore-last.json, journalctl -u ject-pg-restore-test."),
     ],
+    "ject-restore-freshness": [
+        rule("ject-restore-test-stale", "월간 복원 시험 오래됨 또는 지표 누락",
+             '(up{job="node",host="prod-data"} == 1 '
+             'and (time() - timestamp(up{job="node",host="prod-data"}) < 180)) '
+             'unless on(host) (ject_restore_test_last_run_timestamp_seconds{job="node",host="prod-data"} > 0 '
+             'and (time() - ject_restore_test_last_run_timestamp_seconds{job="node",host="prod-data"} <= 32 * 86400) '
+             'and (ject_restore_test_last_run_timestamp_seconds{job="node",host="prod-data"} <= time()) '
+             'and (time() - timestamp(ject_restore_test_last_run_timestamp_seconds{job="node",host="prod-data"}) < 180))',
+             "gt", 0, "5m", "warning",
+             "월간 복원 시험 기록이 오래되었거나 유효한 지표가 없습니다",
+             "초기값: 매월1일05시KST 일정에 대해 최대32일 경과를 감시합니다. "
+             "정확한 월별 실행기한 감시는 아니며 짧은 달에는 탐지가 늦습니다. "
+             "지표 누락·180초 이상 오래된 표본·미래 시각도 경고합니다. "
+             "ject-pg-restore-test.timer와 restore-last.json을 읽기 전용으로 확인하세요. "
+             "최근 실행은 복원 성공 증거가 아니며 기존 실패 경보를 함께 확인합니다."),
+    ],
     "ject-external": [
         rule("ject-probe-fail", "공인 주소 접속 실패",
-             'probe_success or on() (0 * absent(probe_success))', "lt", 1, "3m", "critical",
+             # 두 대상을 각각 유지한다. 180초 이상 오래된 성공 표본도 누락으로 처리한다.
+             '(min by(target) (probe_success{job=~"integrations/blackbox/(dev|prod)",host="dev",target=~"dev|prod"} '
+             'and (time() - timestamp(probe_success{job=~"integrations/blackbox/(dev|prod)",host="dev",target=~"dev|prod"}) < 180))) '
+             'or on(target) (label_replace(vector(0), "target", "dev", "", "") '
+             'or label_replace(vector(0), "target", "prod", "", ""))', "lt", 1, "3m", "critical",
              "{{ $labels.target }} 공인 주소(/readyz) 접속 실패",
-             "개발·모니터링 VM에서 NAT를 거쳐 공인 HTTPS 주소를 1분마다 시험합니다. 운영 Nginx·인증서·앱 readiness(DB·Redis)를 확인하세요. "
+             "개발·모니터링 VM에서 NAT를 거쳐 공인 HTTPS 주소를 1분마다 시험합니다. 대상별 실패·누락·180초 이상 오래된 표본을 감지합니다. 운영 Nginx·인증서·앱 readiness(DB·Redis)를 확인하세요. "
              "OCI Health Checks는 무료가 아니어서 이 시험으로 대신합니다."),
         rule("ject-cert-expiry", "인증서 만료 14일 이내",
              '(probe_ssl_earliest_cert_expiry - time()) / 86400', "lt", 14, "0s", "warning",
              "{{ $labels.target }} 인증서 만료까지 {{ $values.A.Value }}일",
              "자동 갱신(ject-certbot-renew.timer, 만료 30일 전부터 시도)이 실패하고 있습니다. sudo /opt/ject/bin/ject-cert renew 로그를 확인하세요."),
+    ],
+    "ject-observability": [
+        rule("ject-obs-component-down", "관측 도구 수집 실패 또는 누락",
+             '(' + ' or '.join(f'label_replace(label_replace(vector(1), "host", "dev", "", ""), "component", "{c}", "", "")'
+                               for c in ("grafana", "loki", "prometheus")) + ') '
+             'unless on(host,component) (up{job="obs",host="dev",component=~"grafana|loki|prometheus"} == 1 '
+             'and (time() - timestamp(up{job="obs",host="dev",component=~"grafana|loki|prometheus"}) < 180)) '
+             'and on(host) (up{job="node",host="dev"} == 1 and (time() - timestamp(up{job="node",host="dev"}) < 180))',
+             "gt", 0, "2m", "critical", "{{ $labels.component }} 관측 지표 수집 실패",
+             "초기값: 180초 신선도와 2분 지속을 확인합니다. 개발 노드 지표가 살아 있을 때만 울립니다. "
+             "Grafana/Prometheus 자체가 완전히 멈추면 이 내부 경보도 전달하지 못하므로 OCI 직접 이메일 경로를 유지합니다."),
+        rule("ject-metrics-write-failed", "메트릭 전송 실패 증가",
+             'sum by(host) (increase(prometheus_remote_storage_samples_failed_total{job="integrations/self",host=~"dev|prod-app|prod-data"}[5m])) '
+             'and on(host) (up{job="node",host=~"dev|prod-app|prod-data"} == 1 '
+             'and (time() - timestamp(up{job="node",host=~"dev|prod-app|prod-data"}) < 180))',
+             "gt", 0, "2m", "warning", f"{HOST} 메트릭 전송 실패 증가",
+             "초기값: 최근 5분 실패 증가가 2분 지속될 때 확인합니다. Alloy remote-write·인증·수신기 상태를 확인하세요. "
+             "노드 미수집은 서버 지표 끊김 경보가 담당하며, 이 규칙만으로 모든 전송 손실을 보장하지 않습니다."),
+        rule("ject-logs-write-dropped", "로그 전송 폐기 증가",
+             'sum by(host) (increase(loki_write_dropped_entries_total{job="integrations/self",host=~"dev|prod-app|prod-data"}[5m])) '
+             'and on(host) (up{job="node",host=~"dev|prod-app|prod-data"} == 1 '
+             'and (time() - timestamp(up{job="node",host=~"dev|prod-app|prod-data"}) < 180))',
+             "gt", 0, "2m", "warning", f"{HOST} Loki 전송 로그 폐기 증가",
+             "초기값: 최근 5분 폐기 증가가 2분 지속될 때 확인합니다. Loki 수신 제한·인증·전송 오류를 확인하고 원본 로그를 알림에 복사하지 않습니다. "
+             "정상 마스킹/drop 처리와 전송 실패 카운터를 구분합니다."),
     ],
     "ject-app": [
         rule("ject-app-down", "앱 지표 끊김",
@@ -199,8 +244,9 @@ def write_rules():
 # ---- 대시보드 -----------------------------------------------------------------
 
 class Board:
-    def __init__(self, uid, title, tags):
+    def __init__(self, uid, title, tags, description=None):
         self.uid, self.title, self.tags = uid, title, tags
+        self.description = description
         self.panels, self.x, self.y, self.row_h, self.pid = [], 0, 0, 0, 1
         self.templating = []
 
@@ -254,6 +300,7 @@ class Board:
 
     def json(self):
         return {
+            **({"description": self.description} if self.description else {}),
             "uid": self.uid, "title": self.title, "tags": self.tags, "timezone": "Asia/Seoul",
             "schemaVersion": 39, "version": 1, "editable": False, "refresh": "1m",
             "time": {"from": "now-6h", "to": "now"},
@@ -314,11 +361,12 @@ def overview():
 
 
 def app():
-    b = Board("ject-app", "JECT 앱", ["ject"])
+    b = Board("ject-app", "JECT 앱", ["ject"],
+              "수집 성공은 업무 정상 판정이 아닙니다. HTTP/JVM 지표 미연결·요청 없음으로 인한 No data는 0이나 정상과 구분해야 합니다.")
     b.var("host", 'label_values(up{job="app"}, host)', label="서버")
     b.row("상태")
     b.panel("stat", "앱 지표 수집", [q('last_over_time(up{job="app", host=~"$host"}[2m])', "{{host}}")], w=6, h=5, options=STAT,
-            field={"mappings": [{"type": "value", "options": {"0": {"text": "끊김", "color": "red"}, "1": {"text": "정상", "color": "green"}}}]})
+            field={"mappings": [{"type": "value", "options": {"0": {"text": "끊김", "color": "red"}, "1": {"text": "수집 성공", "color": "green"}}}]})
     b.panel("stat", "앱 가동 시간", [q('time() - process_start_time_seconds{job="app", host=~"$host"}', "{{host}}")], w=6, h=5, unit="s", options=STAT)
     b.panel("timeseries", "스모크 앱 요청(실제 앱이 오면 비어 있음)", [q('sum by(host, pattern, status) (rate(ject_smoke_http_requests_total{host=~"$host"}[5m]))', "{{host}} {{pattern}} {{status}}")], w=12, h=5, unit="reqps")
     b.row("HTTP (Spring Boot Micrometer)")

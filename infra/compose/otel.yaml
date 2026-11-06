@@ -1,0 +1,81 @@
+# 개발VM에만 명시적으로 설치한다. 기존 obs/agent/app Compose와 독립.
+# ject-otel.service의 mount/resource preflight 뒤 실행. Docker 자체 자동 재시작 금지.
+name: ject-otel
+x-logging: &logging
+  driver: json-file
+  options: { max-size: "5m", max-file: "2" }
+services:
+  tempo:
+    image: grafana/tempo@sha256:ef71057012c3135fce32cc227fb027d69b94b8d387f581242916f449199febc8
+    user: "10001:10001"
+    restart: "no"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 512m
+    cpus: 0.35
+    pids_limit: 128
+    command: ["-config.file=/etc/tempo/tempo.yaml"]
+    tmpfs: ["/tmp:uid=10001,gid=10001,mode=0700,size=16m"]
+    volumes:
+      - type: bind
+        source: /opt/ject/otel/tempo.dev.yaml
+        target: /etc/tempo/tempo.yaml
+        read_only: true
+        bind: { create_host_path: false }
+      - type: bind
+        source: /srv/ject/observability/tempo
+        target: /var/tempo
+        bind: { create_host_path: false }
+    networks: [traces]
+    logging: *logging
+  collector:
+    image: grafana/alloy@sha256:2aa2099af76c0098d4af7a4d6e48f86cb66dc1a000222ad927a1c67c6542d13f
+    user: "65534:65534"
+    restart: "no"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 256m
+    cpus: 0.15
+    pids_limit: 128
+    command: [run, --disable-reporting, --storage.path=/var/lib/alloy, --server.http.listen-addr=0.0.0.0:12345, /etc/alloy/collector.alloy]
+    tmpfs: ["/var/lib/alloy:uid=65534,gid=65534,mode=0700,size=32m", "/tmp:uid=65534,gid=65534,mode=0700,size=16m"]
+    volumes:
+      - type: bind
+        source: /opt/ject/otel/collector.alloy
+        target: /etc/alloy/collector.alloy
+        read_only: true
+        bind: { create_host_path: false }
+    networks: [traces]
+    depends_on: [tempo]
+    logging: *logging
+  proxy:
+    # nginx 1.30.6-alpine ARM64 manifest; only this ingress proxy has an egress route.
+    image: nginx@sha256:564a09935b00f058ca1b28c742169ba817499baa0479807bf7f373fe2804fbf7
+    user: "101:101"
+    restart: "no"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 64m
+    cpus: 0.05
+    pids_limit: 32
+    entrypoint: [nginx]
+    command: ["-c", "/etc/nginx/otel.conf", "-g", "daemon off;"]
+    tmpfs: ["/tmp:uid=101,gid=101,mode=0700,size=8m"]
+    volumes:
+      - type: bind
+        source: /opt/ject/otel/proxy.conf
+        target: /etc/nginx/otel.conf
+        read_only: true
+        bind: { create_host_path: false }
+    ports: ["127.0.0.1:3200:3200", "127.0.0.1:4318:4318", "127.0.0.1:12346:12346"]
+    networks: [traces, ingress]
+    depends_on: [tempo, collector]
+    logging: *logging
+networks:
+  ingress:
+    driver: bridge
+  traces:
+    internal: true

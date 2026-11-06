@@ -25,6 +25,6 @@ members:
     tailscale: ""
   - username: minseo
     role: FE
-    public_key: ""
-    server_account: ""
-    tailscale: ""
+    public_key: .local/ject-access/minseo.pub
+    server_account: 2026-11-07 # 3대 키 지문·소유자·권한 확인, 본인 접속 미확인
+    tailscale: 관리자 로그인 확인; 사용자 직접 초대 대기(2026-11-07)

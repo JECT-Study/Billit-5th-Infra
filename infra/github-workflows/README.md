@@ -46,7 +46,22 @@
 빌드 입력은 `context`, `dockerfile`, `image_name`, `extra_build_args`이며, FE 웹은 `image_name: ject-fe`, 배포 입력 `service: fe`를 사용한다. BE는 `ject-be`, `service: be`다.
 비밀값과 `development`·`production` 환경의 승인·변수는 **호출하는 앱 저장소**에 둔다. 공통 배포 호출에는 `secrets: inherit`와 필요한 `permissions`를 전달한다.
 
-Next.js 웹에서 같은 이미지를 개발·운영에 사용하려면 `NEXT_PUBLIC_*`에 환경별 API 주소를 빌드 시 고정하지 않는다. 같은 호스트의 `/api` 상대 경로 또는 런타임 설정을 사용한다. 웹 Dockerfile에는 상태 검사를 정의하고, 배포 후 `PROD_FE_UPSTREAM=fe:3000`·`DEV_FE_UPSTREAM=fe:3000`으로 Nginx를 연결한다. 웹은 OCI 배포로 확정됐다. 웹 컨테이너의 정상 배포를 확인한 뒤 Nginx 연결을 활성화한다.
+Next.js 웹에서 같은 이미지를 개발·운영에 사용하려면 `NEXT_PUBLIC_*`에 환경별 API 주소를 빌드 시 고정하지 않는다. 같은 호스트의 `/api` 상대 경로 또는 런타임 설정을 사용한다. 웹 Dockerfile에는 포트3000의 `/healthz` 상태 검사를 정의한다. 웹은 OCI 배포로 확정됐다.
+
+### FE 최초 배포의 라우팅 준비와 복구
+
+최초 FE 배포 **전에** 일반 웹 경로(`/`)를 `fe:3000`으로 연결한다. 설정이 없으면 Nginx가 `/healthz`까지 BE로 보내므로, FE 기동 이후에 라우팅을 켜는 순서는 사용할 수 없다. `ject-deploy`는 환경 설정과 생성된 Nginx의 FE 경로를 먼저 검사하고 미준비 시 이미지 변경 전에 중단한다. Nginx를 직접 변경하거나 reload하지는 않는다. `nginx -T`는 디스크 설정 검사이므로 운영자가 아래 reload까지 수행해야 한다.
+
+1. 실행할 환경 하나만 선택하고 기존 환경 파일과 Nginx `conf.d` 파일을 권한을 보존하여 비공개 작업 폴더에 백업한다. 동시에 배포/라우팅을 바꾸지 않는다.
+   - 개발: `/etc/ject/host.env`, `/srv/ject/dev/nginx/conf.d/dev.conf`, 게이트웨이 `ject-dev-gateway-nginx-1`.
+   - 운영: `/srv/ject/app/edge.env`, `/srv/ject/app/nginx/conf.d/ject.conf`, 게이트웨이 `ject-edge-nginx-1`.
+2. 개발 환경 파일에는 `DEV_FE_UPSTREAM=fe:3000`, 운영 환경 파일에는 `PROD_FE_UPSTREAM=fe:3000`을 중복 없이 저장한다. 개발은 `DEV_FE_UPSTREAM=fe:3000 /opt/ject/bin/render-nginx.sh dev-gateway`, 운영은 `/opt/ject/bin/render-nginx.sh edge`로 생성한다. 이어 해당 게이트웨이에서 `nginx -t`와 `nginx -s reload`를 실행한다. 실패하면 4번 복구를 수행하고 배포하지 않는다.
+3. 준비된 digest로 기존 `ject-deploy deploy <dev|prod> fe ...`를 실행한다. 직접 `fe:3000/healthz`와 Nginx 경유 `/healthz` 모두 성공해야 배포 성공으로 처리된다. 일반 웹 `/` 응답이 실제 FE 화면인지, `/api/`·`/readyz`가 여전히 BE인지도 확인한다. healthcheck만으로 사용자 흐름 검증을 완료 처리하지 않는다.
+4. 최초 배포나 라우팅 검증이 실패하면 백업한 환경 파일·Nginx 설정을 복구하고 해당 게이트웨이에서 `nginx -t` 후 `nginx -s reload`한다. 기존 `/`·`/api/`·`/readyz` 응답을 다시 확인한다. 최초 배포에는 이전 FE 이미지가 없어 이미지 자동 복구가 불가능할 수 있으므로 라우팅 복구를 생략하지 않는다. 실패한 FE 컨테이너·release 값은 상태 확인 후 FE에 한정해 정리한다.
+
+이 준비부터 최초 FE 기동까지 `/`·`/healthz`는 잠시502일 수 있다. 최초 공개 전에 제한된 작업 시간에 수행한다. 무중단 전환이 필요한 기존 서비스에는 이 절차를 그대로 적용하지 않는다. 후속 FE 이미지 교체는 기존 라우팅을 유지하며 검증 실패 시 이전 성공 이미지로 복구한다.
+
+로컬 검증은 `python3 -B -m unittest discover -s infra/tests -p 'test_fe_readiness.py' -v`로 실행한다. 실제 Nginx 라우팅 시험은 전용 `colima-billit-verify` Docker context에 `nginx:1.30.6-alpine` 이미지를 준비한 뒤 `python3 -B infra/tests/fe-routing-e2e.py`를 실행한다. 시험은 내부 네트워크와 고유 이름 컨테이너만 만들고 정리하며 호스트 포트·실서버·앱 저장소를 사용하지 않는다. 이는 합성 라우팅 검증이며 실제 FE 이미지·운영 TLS·업무 흐름의 검증을 대신하지 않는다.
 
 Release 이벤트·버전 태그 생성은 이 예시에 포함하지 않는다. 현재 운영 진입점은 수동 실행이며, 릴리스 정책 확정 후 같은 digest에 태그를 붙이는 절차를 연결한다.
 

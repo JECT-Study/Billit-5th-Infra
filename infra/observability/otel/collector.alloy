@@ -1,0 +1,109 @@
+// 개발 인프라 검증용 opt-in. 실제 앱 연결 전 서비스/메타데이터 계약 검토 필요.
+// infra-validation 외 service 및 links 있는 span은 폐기. 원문 로그/debug exporter 없음.
+// HTTP endpoint는 컨테이너 내부; Compose는 호스트 루프백만 공개한다.
+logging { level = "warn" }
+
+otelcol.receiver.otlp "dev" {
+  http {
+    endpoint = "0.0.0.0:4318"
+    max_request_body_size = "1MiB"
+    compression_algorithms = [""]
+    read_header_timeout = "3s"
+    read_timeout = "5s"
+    write_timeout = "5s"
+  }
+  output {
+    traces = [otelcol.processor.memory_limiter.dev.input]
+  }
+}
+
+// heap 제한과 컨테이너 RSS 상한을 별도로 둔다.
+otelcol.processor.memory_limiter "dev" {
+  check_interval = "1s"
+  limit = "128MiB"
+  spike_limit = "32MiB"
+  output {
+    traces = [otelcol.processor.filter.reject_links.input]
+  }
+}
+
+otelcol.processor.filter "reject_links" {
+  error_mode = "propagate"
+  traces {
+    span = [`Len(links) > 0`, `resource.attributes["service.name"] != "infra-validation"`]
+    spanevent = [`true`]
+  }
+  output {
+    traces = [otelcol.processor.transform.sanitize.input]
+  }
+}
+
+otelcol.processor.transform "sanitize" {
+  error_mode = "propagate"
+  trace_statements {
+    context = "resource"
+    statements = [
+      `keep_keys(attributes, [])`,
+      `set(attributes["service.name"], "infra-validation")`,
+      `set(attributes["deployment.environment.name"], "dev")`,
+      `set(schema_url, "")`,
+    ]
+  }
+  trace_statements {
+    context = "scope"
+    statements = [
+      `keep_keys(attributes, [])`,
+      `set(name, "sanitized")`,
+      `set(version, "")`,
+      `set(schema_url, "")`,
+    ]
+  }
+  trace_statements {
+    context = "span"
+    statements = [
+      `set(name, "operation")`,
+      `set(trace_state, "")`,
+      `set(status.message, "")`,
+      `keep_keys(attributes, ["http.request.method", "http.response.status_code", "db.system"])`,
+      `delete_key(attributes, "http.request.method") where attributes["http.request.method"] != "GET" and attributes["http.request.method"] != "POST" and attributes["http.request.method"] != "PUT" and attributes["http.request.method"] != "PATCH" and attributes["http.request.method"] != "DELETE" and attributes["http.request.method"] != "HEAD" and attributes["http.request.method"] != "OPTIONS"`,
+      `delete_key(attributes, "db.system") where attributes["db.system"] != "postgresql" and attributes["db.system"] != "redis"`,
+      `delete_key(attributes, "http.response.status_code") where not IsInt(attributes["http.response.status_code"])`,
+      `delete_key(attributes, "http.response.status_code") where attributes["http.response.status_code"] != nil and (attributes["http.response.status_code"] < 100 or attributes["http.response.status_code"] > 599)`,
+    ]
+  }
+  output {
+    traces = [otelcol.processor.batch.dev.input]
+  }
+}
+
+// max_size는 span 개수 상한이며 요청 바이트·전체 저장량 상한이 아니다.
+otelcol.processor.batch "dev" {
+  send_batch_size = 16
+  send_batch_max_size = 32
+  timeout = "200ms"
+  output {
+    traces = [otelcol.exporter.otlphttp.dev.input]
+  }
+}
+
+otelcol.exporter.otlphttp "dev" {
+  encoding = "json"
+  client {
+    endpoint = "http://tempo:4318"
+    timeout = "5s"
+    compression = "none"
+  }
+  sending_queue {
+    enabled = true
+    num_consumers = 1
+    queue_size = 2097152
+    sizer = "bytes"
+    block_on_overflow = false
+  }
+  retry_on_failure {
+    enabled = true
+    initial_interval = "1s"
+    max_interval = "5s"
+    max_elapsed_time = "30s"
+  }
+}

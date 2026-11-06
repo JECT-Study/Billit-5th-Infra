@@ -73,9 +73,9 @@ sshd는 키 로그인만, `AllowGroups ject-admins deploy`, `MaxAuthTries 3`.
   Tailscale이 안 될 때만 `JECT_SSH_ARGS="-N -L 3000:127.0.0.1:3000" OCI_PROFILE=JECT bash access/ject-ssh.sh seongju dev`(Bastion).
   관리자 비밀번호: 개발 VM `sudo cat /srv/ject/secrets/grafana_admin_password`(사용자 `admin`). 팀원 계정은 사람마다 따로 만든다.
 - 대시보드: 「JECT 개요」(서버·백업·공인 주소·인증서·관측 도구), 「JECT 앱」(HTTP·JVM·Hikari), 「JECT 로그」.
-  규칙·대시보드는 `observability/grafana/generate.py`를 고치고 다시 생성한 뒤 `install-role.sh dev <GHCR 소유자>`로 반영한다(Grafana 재시작 필요).
-- 알림 규칙 15개: 서버 지표 끊김·디스크 80/90%·메모리 15%·CPU 85%, 백업 실패·26시간 성공 없음·복원 시험 실패, 공인 주소 실패·인증서 14일,
-  앱 지표 끊김·5xx 5%·p95 1초·DB 커넥션 대기·운영 오류 로그. OCI 알람: VM 응답 없음(5분)·메모리 90%(10분).
+  규칙·대시보드는 `observability/grafana/generate.py`로 생성하고, 해당 파일만 백업·교체한 뒤 Grafana를 재시작한다. 기존 서버에 `install-role.sh`를 다시 실행하면 선택 수신처·대시보드·Alloy 설정이 지워질 수 있으므로 관측 변경에 사용하지 않는다.
+- 기본 알림 규칙 19개: 서버 지표 끊김·디스크 80/90%·메모리 15%·CPU 85%, 백업 실패·26시간 성공 없음·복원 시험 실패, 공인 주소 실패·인증서 14일,
+  앱 지표 끊김·5xx 5%·p95 1초·DB 커넥션 대기·운영 오류 로그, 관측도구 누락·지표 전송 실패·로그 폐기·복원 시험 오래됨. OCI 알람: VM 응답 없음(5분)·메모리 90%(10분).
 - 설치 순서(개발 VM): `setup-secrets.sh obs` → `PROBE_PROD_URL=… PROBE_DEV_URL=… setup-secrets.sh obs-env dev dev <개발 IP>` →
   `/etc/ject/alert-relay.env`에 `ALERT_TOPIC_ID=$(tofu output -raw alert_topic_id)` → `docker compose -p ject-obs -f obs.yaml --env-file /etc/ject/host.env up -d` →
   `systemctl enable --now ject-alert-relay` → `docker compose -p ject-agent -f agent.yaml --env-file /etc/ject/obs.env up -d`.
@@ -90,3 +90,16 @@ colima ssh -- sudo bash "$PWD/infra/tests/local-e2e.sh"
 ```
 OCI 대신 `tests/fake-oci.py`를 쓰므로, 실제 버킷·인스턴스 주체 권한은 서버에서 따로 검증한다.
 모니터링: `colima ssh -- sudo bash "$PWD/infra/tests/local-obs-e2e.sh"`(중계기는 DRY_RUN — 실제 OCI 발행은 서버에서 확인).
+
+## 선택 기능과 적용 경계
+
+- [Redis 지표 수집](observability/redis-README.md): 앱 계정과 축출 정책을 유지하고 제한된 전용 관측 계정·Alloy overlay를 추가한다. 선택 경보4개를 별도 생성하므로 기본19개와 합하면23개다.
+- [Discord 팀 알림](observability/grafana/README-alert-contact.md): 기존 이메일 수신처에 보호된 웹후크 receiver를 추가한다. 공개 저장소에는 실제 URL을 저장하지 않는다.
+- [개발 추적 수집](observability/otel/README.md): 전용1GiB 저장공간·내부 격리·루프백 수신·자원 제한을 갖춘 합성시험용 경로다. 실제 앱 계측은 별도다.
+- 복원 시험은 체크섬·manifest를 검증하고 원 소유권·역할·권한을 복원한다. 테이블별 행 수 비교 성공은 실제 업무 시나리오 복구 검증을 대신하지 않는다.
+
+```sh
+python3 -B -m unittest discover -s infra/tests -p 'test_*.py'
+```
+
+위 명령은 저장소 루트 기준의 집중 회귀시험이다. Docker 통합시험과 실서버 수신·복원 검증은 각 기능 문서의 별도 절차를 따른다.

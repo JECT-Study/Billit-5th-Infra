@@ -1,4 +1,5 @@
 {
+ "description": "수집 성공은 업무 정상 판정이 아닙니다. HTTP/JVM 지표 미연결·요청 없음으로 인한 No data는 0이나 정상과 구분해야 합니다.",
  "uid": "ject-app",
  "title": "JECT 앱",
  "tags": [
@@ -91,7 +92,7 @@
          "color": "red"
         },
         "1": {
-         "text": "정상",
+         "text": "수집 성공",
          "color": "green"
         }
        }
