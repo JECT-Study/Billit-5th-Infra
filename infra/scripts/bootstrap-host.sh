@@ -125,6 +125,14 @@ cat > /etc/motd <<CONF
 CONF
 # 우분투 기본 안내 중 광고·업그레이드 권유는 끈다. 시스템 정보, 업데이트 수, 재부팅 필요 표시는 남긴다.
 if [ -f /etc/default/motd-news ]; then sed -i 's/^ENABLED=1/ENABLED=0/' /etc/default/motd-news; fi
+# 아래에서 실행 권한을 제거하므로 뉴스 타이머도 중지한다. 남겨 두면
+# systemd가 실행 불가능한 스크립트를 호출해 203/EXEC 실패를 반복한다.
+if systemctl cat motd-news.timer >/dev/null 2>&1; then
+  systemctl disable --now motd-news.timer
+fi
+if systemctl is-failed --quiet motd-news.service; then
+  systemctl reset-failed motd-news.service
+fi
 for f in 10-help-text 50-motd-news 91-contract-ua-esm-status 91-release-upgrade; do
   if [ -f "/etc/update-motd.d/$f" ]; then chmod -x "/etc/update-motd.d/$f"; fi
 done
