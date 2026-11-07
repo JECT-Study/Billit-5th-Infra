@@ -103,3 +103,9 @@ python3 -B -m unittest discover -s infra/tests -p 'test_*.py'
 ```
 
 위 명령은 저장소 루트 기준의 집중 회귀시험이다. Docker 통합시험과 실서버 수신·복원 검증은 각 기능 문서의 별도 절차를 따른다.
+
+### FE 이미지 저장소를 별도로 허용하기
+
+BE와 FE 이미지의 게시 조직이 다르면 `/etc/ject/deploy.conf`에 `ALLOWED_FE_IMAGE_REPOSITORY=ghcr.io/<조직>/<FE 이미지>`를 지정한다. 이 값은 FE 신규 배포에서 저장소 이름 전체가 일치해야 통과하며, 기존 `ALLOWED_IMAGE_PREFIX`와 BE 배포 범위는 유지한다. 태그가 붙어 있어도 digest 고정은 필수다. 설정하지 않으면 기존 prefix 검사를 사용한다.
+
+서버에 이 설정을 적용하기 전에 새 이미지의 출처·digest·기동 검증과 레지스트리 pull 권한을 확인한다. 이미지 허용 설정만으로 FE 라우팅이나 실제 배포가 완료되지는 않는다.
