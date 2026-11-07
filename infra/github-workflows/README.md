@@ -48,6 +48,23 @@
 
 Next.js 웹에서 같은 이미지를 개발·운영에 사용하려면 `NEXT_PUBLIC_*`에 환경별 API 주소를 빌드 시 고정하지 않는다. 같은 호스트의 `/api` 상대 경로 또는 런타임 설정을 사용한다. 웹 Dockerfile에는 포트3000의 `/healthz` 상태 검사를 정의한다. 웹은 OCI 배포로 확정됐다.
 
+### Infra에서 기존 FE 소스만 수동 빌드
+
+`build-fe-manual.yml`을 Infra의 `.github/workflows/build-fe-manual.yml`에 배치하고 Actions에서 검토한 Client 커밋의 40자리 소문자 SHA를 `source_sha`로 지정한다. 공개 `JECT-Study/Billit-5th-Infra`에서만 실행되며, 별도 체크아웃한 `JECT-Study/Billit-5th-Client`의 `apps/web/Dockerfile`을 그대로 사용한다. 앱 저장소 파일·커밋 상태와 서버는 변경하지 않는다. 기존 공통 CD의 개발 검증 표시도 생성하지 않는다.
+
+무료 공개 ARM64 러너에서 빌드한 뒤, 외부 연결 없는 컨테이너에서 384MiB 제한·실제 비루트 UID·이미지 healthcheck·`/healthz`·`/` HTML을 확인하고 임시 컨테이너를 제거한다. 이 단계가 실패하면 GHCR 로그인·게시 단계는 실행하지 않는다. 별도 공개 API 주소를 주입하지 않으며 현재 앱의 같은 출처 `/api` 계약을 유지한다. 이 검사는 업무 기능 E2E나 개발 서버 라우팅·백엔드 연결 검증이 아니다.
+
+게시 대상은 실행 저장소 소유자의 `ghcr.io/ject-study/ject-fe`다. Actions 요약과 `published` 단계의 `image` 출력에 `repository@sha256:…`가 남는다. 배포 전 해당 digest를 가져와 ARM64와 아래 라벨을 대조한다. 태그만으로 배포하지 않는다.
+
+| 이미지 라벨 | 기대값 |
+| --- | --- |
+| `org.opencontainers.image.source` | Infra 저장소 URL — GHCR 패키지 연결 |
+| `io.ject.app.source` | `https://github.com/JECT-Study/Billit-5th-Client` |
+| `org.opencontainers.image.revision` | 입력한 Client 전체 SHA |
+| `io.ject.infra.revision` | 실행한 Infra 전체 SHA |
+
+GHCR 패키지 생성·접근 권한, 실제 앱 Docker 빌드 및 이 워크플로의 Actions 실행은 별도 실검증이 필요하다. 패키지가 자동으로 공개된다고 가정하지 않는다. 비공개 패키지를 서버로 가져오려면 승인된 읽기 인증이 필요하다. 검증된 digest의 FE 전용 허용 저장소 설정과 최초 라우팅 준비를 확인한 뒤 기존 `ject-deploy`로 별도 배포한다. Client SHA를 Infra 커밋으로 간주해 기존 공통 CD를 호출하지 않는다.
+
 ### FE 최초 배포의 라우팅 준비와 복구
 
 최초 FE 배포 **전에** 일반 웹 경로(`/`)를 `fe:3000`으로 연결한다. 설정이 없으면 Nginx가 `/healthz`까지 BE로 보내므로, FE 기동 이후에 라우팅을 켜는 순서는 사용할 수 없다. `ject-deploy`는 환경 설정과 생성된 Nginx의 FE 경로를 먼저 검사하고 미준비 시 이미지 변경 전에 중단한다. Nginx를 직접 변경하거나 reload하지는 않는다. `nginx -T`는 디스크 설정 검사이므로 운영자가 아래 reload까지 수행해야 한다.

@@ -1,0 +1,109 @@
+# Infra 전용 수동 빌드. 앱 저장소에는 쓰지 않으며 서버 배포도 하지 않는다.
+name: build-fe-manual
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_sha:
+        description: 'JECT-Study/Billit-5th-Client의 검토한 40자리 commit SHA'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build:
+    if: github.repository == 'JECT-Study/Billit-5th-Infra' && github.event.repository.private == false
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 25
+    env:
+      SOURCE_SHA: ${{ inputs.source_sha }}
+      INFRA_SHA: ${{ github.sha }}
+      REPOSITORY_OWNER: ${{ github.repository_owner }}
+    steps:
+      - name: Validate source and image namespace
+        id: inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo 'source_sha must be 40 lowercase hex characters'; exit 1; }
+          [[ "$INFRA_SHA" =~ ^[0-9a-f]{40}$ ]] || exit 1
+          owner=$(printf '%s' "$REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')
+          [[ "$owner" =~ ^[a-z0-9][a-z0-9-]*$ ]] || exit 1
+          [[ "$GITHUB_RUN_ID" =~ ^[0-9]+$ && "$GITHUB_RUN_ATTEMPT" =~ ^[0-9]+$ ]] || exit 1
+          image="ghcr.io/$owner/ject-fe:sha-$SOURCE_SHA-infra-${INFRA_SHA:0:12}-run-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          echo "image=$image" >> "$GITHUB_OUTPUT"
+          echo "repository=ghcr.io/$owner/ject-fe" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout infrastructure revision
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+          path: infrastructure
+          persist-credentials: false
+
+      - name: Checkout fixed Client source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: JECT-Study/Billit-5th-Client
+          ref: ${{ inputs.source_sha }}
+          path: source
+          persist-credentials: false
+
+      - name: Verify checkout revisions
+        shell: bash
+        run: |
+          set -euo pipefail
+          [ "$(git -C source rev-parse HEAD)" = "$SOURCE_SHA" ]
+          [ "$(git -C infrastructure rev-parse HEAD)" = "$INFRA_SHA" ]
+
+      - name: Build source Dockerfile locally
+        env:
+          IMAGE: ${{ steps.inputs.outputs.image }}
+        run: |
+          set -euo pipefail
+          docker build --platform linux/arm64 --file source/apps/web/Dockerfile \
+            --build-arg "VERSION=$SOURCE_SHA" \
+            --label "org.opencontainers.image.revision=$SOURCE_SHA" \
+            --label "org.opencontainers.image.source=https://github.com/JECT-Study/Billit-5th-Infra" \
+            --label "io.ject.app.source=https://github.com/JECT-Study/Billit-5th-Client" \
+            --label "io.ject.infra.revision=$INFRA_SHA" \
+            --tag "$IMAGE" source
+
+      - name: Verify isolated FE image before publishing
+        env:
+          IMAGE: ${{ steps.inputs.outputs.image }}
+        run: |
+          python3 infrastructure/infra/scripts/verify-fe-image.py \
+            --image "$IMAGE" --source-sha "$SOURCE_SHA" --infra-sha "$INFRA_SHA"
+
+      - name: Publish verified local image and report digest
+        id: published
+        env:
+          IMAGE: ${{ steps.inputs.outputs.image }}
+          IMAGE_REPOSITORY: ${{ steps.inputs.outputs.repository }}
+          GHCR_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          export DOCKER_CONFIG
+          DOCKER_CONFIG=$(mktemp -d "$RUNNER_TEMP/fe-registry.XXXXXX")
+          trap 'rm -rf "$DOCKER_CONFIG"' EXIT
+          printf '%s' "$GHCR_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+          docker push "$IMAGE"
+          published=$(docker image inspect --format '{{index .RepoDigests 0}}' "$IMAGE")
+          [[ "$published" == "$IMAGE_REPOSITORY@sha256:"* ]] || exit 1
+          digest="${published##*@}"
+          [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]] || exit 1
+          echo "image=$published" >> "$GITHUB_OUTPUT"
+          {
+            echo '## FE image build and isolated probes'
+            echo "- Client source: \`$SOURCE_SHA\`"
+            echo "- Infra workflow: \`$INFRA_SHA\`"
+            echo "- Image: \`$published\`"
+            echo '- Verified: ARM64, 384MiB, non-root, image healthcheck, /healthz, / HTML.'
+            echo '- Not verified: development routing, backend connection, business E2E, production.'
+            echo '- No deployment or Client commit status was performed.'
+          } >> "$GITHUB_STEP_SUMMARY"
