@@ -53,3 +53,17 @@
 - [Google SRE postmortem](https://sre.google/workbook/postmortem-culture/)
 
 이 문서는 위 원칙을 현재 구성에 맞춰 재구성했다. 모든 대응 절차의 실전 검증 완료를 뜻하지 않는다.
+
+## 개발 FE HTTPS 감시 (배포 후 선택 적용)
+
+BE `/readyz`가 성공해도 FE가 정상이라는 뜻은 아니다. 개발 FE를 배포한 뒤에만 다음 구성을 함께 설치한다.
+
+- `alloy/fe.alloy.example` → 개발 VM의 `/etc/ject/alloy/fe.alloy`.
+- `/etc/ject/obs.env`의 `PROBE_DEV_FE_URL` → 실제 개발 HTTPS `/healthz` 주소. `compose/agent.yaml`의 동일 환경변수 전달도 필요하다.
+- `grafana/fe-alerts.py`가 출력하는 JSON → `/etc/ject/grafana/provisioning/alerting/fe-rules.yaml`.
+
+기존 Alloy 설정과 함께 validate한 뒤 수집기만 갱신한다. FE·BE 컨테이너는 재시작하지 않는다. 새 지표의 `job=integrations/blackbox/dev-fe`, `host=dev`, `target=dev-fe`와 `probe_success=1`을 확인하고 Grafana alerting provisioning을 reload한다.
+
+검사는 매분 HTTPS 200, 리디렉션 없음, `ok` 본문을 요구한다. 실패·지표 누락·180초 이상 오래된 표본이 3분 지속되면 기존 팀 장애 경로로 알린다. FE 컨테이너 상태와 웹 라우팅을 먼저 확인한다. 이 검사는 로그인·업로드·정산 업무 E2E가 아니다.
+
+FE를 아직 배포하지 않은 환경에는 이 파일과 경보를 설치하지 않는다. 제거할 때는 해당 경보 UID `ject-fe-probe-fail`도 명시적으로 제거하고, 다른 관측 규칙은 보존한다. [응답 본문 검사 공식 설정](https://github.com/prometheus/blackbox_exporter/blob/master/CONFIGURATION.md).

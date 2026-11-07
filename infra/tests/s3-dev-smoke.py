@@ -55,11 +55,13 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
         return None
 
 
-def request(url, method, body=None):
+def request(url, method, body=None, headers=None, response_headers=None):
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect())
-    req = urllib.request.Request(url, method=method, data=body)
+    req = urllib.request.Request(url, method=method, data=body, headers=headers or {})
     try:
         with opener.open(req, timeout=20) as response:
+            if response_headers is not None:
+                response_headers.update({k.lower(): v for k, v in response.headers.items()})
             return response.status, response.read(4097), ''
     except urllib.error.HTTPError as exc:
         code = ''
@@ -116,12 +118,97 @@ def run(data):
     return result
 
 
+def browser_origin(path):
+    if path.is_symlink() or not path.is_file() or stat.S_IMODE(path.stat().st_mode) != 0o600:
+        raise ValueError('origin requires a regular 0600 file')
+    value = path.read_text().strip()
+    if not re.fullmatch(r'https://[a-zA-Z0-9.-]+(?::[0-9]{1,5})?', value):
+        raise ValueError('expected HTTPS origin without path')
+    return value
+
+
+def cors_checks(headers, origin):
+    exposed = {v.strip().lower() for v in headers.get('access-control-expose-headers', '').split(',')}
+    return {'origin_allowed': headers.get('access-control-allow-origin') in (origin, '*'),
+            'etag_present': bool(headers.get('etag')),
+            'etag_exposed': 'etag' in exposed or '*' in exposed}
+
+
+def run_browser(data, origin):
+    key = 'infra-validation/' + secrets.token_hex(16) + '.txt'
+    payload = b'JECT development browser storage validation\n'
+    result = {}
+    created = False
+    try:
+        put_url = presign(data, 'PUT', BUCKET, key)
+        response = {}
+        status, _, _ = request(put_url, 'OPTIONS', headers={
+            'Origin': origin, 'Access-Control-Request-Method': 'PUT',
+            'Access-Control-Request-Headers': 'content-type'}, response_headers=response)
+        methods = {v.strip().upper() for v in response.get('access-control-allow-methods', '').split(',')}
+        headers = {v.strip().lower() for v in response.get('access-control-allow-headers', '').split(',')}
+        result['preflight'] = {'status': status,
+            'origin_allowed': cors_checks(response, origin)['origin_allowed'],
+            'put_allowed': 'PUT' in methods or '*' in methods,
+            'content_type_allowed': 'content-type' in headers or '*' in headers}
+        created = True
+        response = {}
+        status, _, code = request(put_url, 'PUT', payload,
+            headers={'Origin': origin, 'Content-Type': 'text/plain'}, response_headers=response)
+        if status not in (200, 201):
+            raise RuntimeError('browser synthetic PUT failed: HTTP ' + str(status))
+        result['put'] = {'status': status, **cors_checks(response, origin)}
+        for method in ('GET', 'HEAD'):
+            response = {}
+            status, content, _ = request(presign(data, method, BUCKET, key), method,
+                headers={'Origin': origin}, response_headers=response)
+            result[method.lower()] = {'status': status, **cors_checks(response, origin)}
+            if status != 200 or (method == 'GET' and content != payload):
+                raise RuntimeError('browser synthetic read verification failed')
+        status, _, code = request(presign(data, 'GET', BUCKET, key), 'PUT', b'wrong method',
+            headers={'Origin': origin, 'Content-Type': 'text/plain'})
+        result['wrong_method'] = {'status': status, 'code': code, 'denied': status == 403}
+        status, _, code = request(presign(data, 'PUT', BUCKET, key), 'PUT', b'overwrite attempt',
+            headers={'Origin': origin, 'Content-Type': 'text/plain'})
+        result['overwrite'] = {'status': status, 'code': code,
+            'denied': status in (403, 404) and code in ('AccessDenied', 'NoSuchBucket')}
+        status, content, _ = request(presign(data, 'GET', BUCKET, key), 'GET')
+        result['original_unchanged'] = status == 200 and content == payload
+    finally:
+        if created:
+            status, _, _ = request(presign(data, 'DELETE', BUCKET, key), 'DELETE')
+            if status not in (200, 204):
+                raise RuntimeError('browser synthetic cleanup failed; owned key: ' + key)
+            status, _, _ = request(presign(data, 'GET', BUCKET, key), 'GET')
+            if status != 404:
+                raise RuntimeError('browser synthetic deletion unverified')
+            result['deleted_and_missing'] = True
+    result['passed'] = browser_passed(result)
+    return result
+
+
+def browser_passed(result):
+    pre = result['preflight']
+    return (200 <= pre['status'] < 300 and all(pre[k] for k in
+        ('origin_allowed', 'put_allowed', 'content_type_allowed'))
+        and all(result[m]['origin_allowed'] and result[m]['etag_present'] and result[m]['etag_exposed']
+                for m in ('put', 'get', 'head'))
+        and result['wrong_method']['denied'] and result['overwrite']['denied']
+        and result['original_unchanged'])
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--credentials', required=True, type=Path)
+    parser.add_argument('--origin-file', type=Path, help='optional private HTTPS development origin file')
     args = parser.parse_args()
     try:
-        print(json.dumps({'result': 'success', 'checks': run(credentials(args.credentials))}))
+        data = credentials(args.credentials)
+        checks = run_browser(data, browser_origin(args.origin_file)) if args.origin_file else run(data)
+        passed = checks.get('passed', True)
+        print(json.dumps({'result': 'success' if passed else 'failed', 'checks': checks}))
+        if not passed:
+            return 1
     except RuntimeError as exc:
         print(str(exc), file=sys.stderr)
         return 1

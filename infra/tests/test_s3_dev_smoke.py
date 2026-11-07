@@ -78,3 +78,40 @@ class S3DevSmokeTests(unittest.TestCase):
                          (204,b'',''), (404,b'','NoSuchKey')]) as request:
             with self.assertRaises(OSError): S.run(DATA)
         self.assertEqual([c.args[1] for c in request.call_args_list], ['PUT','DELETE','GET'])
+
+    def test_browser_cors_boundaries_and_cleanup(self):
+        origin='https://dev.example.test'
+        def fake(url, method, body=None, headers=None, response_headers=None):
+            if response_headers is not None:
+                response_headers.update({'access-control-allow-origin':'*', 'access-control-allow-methods':'PUT, GET, HEAD',
+                    'access-control-allow-headers':'content-type','access-control-expose-headers':'ETag','etag':'synthetic'})
+            if method=='OPTIONS': return 200,b'',''
+            if method=='DELETE': fake.deleted=True;return 204,b'',''
+            if method=='PUT':
+                fake.puts+=1
+                if fake.puts==2:return 403,b'','SignatureDoesNotMatch'
+                if fake.puts==3:return 404,b'','NoSuchBucket'
+                return 200,b'',''
+            if fake.deleted:return 404,b'','NoSuchKey'
+            return 200,b'JECT development browser storage validation\n',''
+        fake.deleted=False;fake.puts=0
+        with patch.object(S,'request',side_effect=fake) as request:
+            result=S.run_browser(DATA,origin)
+        self.assertTrue(result['passed'])
+        self.assertEqual(result['overwrite']['status'],404)
+        self.assertTrue(result['original_unchanged'])
+        self.assertTrue(result['deleted_and_missing'])
+        self.assertNotIn(origin,json.dumps(result))
+        paths={urllib.parse.urlsplit(c.args[0]).path for c in request.call_args_list}
+        self.assertEqual(len(paths),1)
+        self.assertTrue(paths.pop().startswith('/ject-dev-uploads/infra-validation/'))
+
+    def test_cors_missing_exposure_is_not_success(self):
+        check=S.cors_checks({'access-control-allow-origin':'https://other.test','etag':'synthetic'},'https://dev.test')
+        self.assertFalse(check['origin_allowed'])
+        self.assertFalse(check['etag_exposed'])
+
+    def test_browser_put_connection_loss_cleans_only_owned_object(self):
+        with patch.object(S,'request',side_effect=[(200,b'',''),OSError('lost'),(204,b'',''),(404,b'','')]) as request:
+            with self.assertRaises(OSError): S.run_browser(DATA,'https://dev.test')
+        self.assertEqual([c.args[1] for c in request.call_args_list],['OPTIONS','PUT','DELETE','GET'])

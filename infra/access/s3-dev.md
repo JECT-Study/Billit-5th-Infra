@@ -67,3 +67,22 @@ IAM 전파 지연 가능성은 추정이며 원인으로 확정하지 않는다.
 운영/백업 버킷 목록404 NoSuchBucket·삭제 후404를 확인했다. 시험기 종료0.
 계정 이메일은 미확인 상태였다. 초기 오류가 해소된 원인은 확정하지 않는다.
 CORS·multipart·실제 앱 연동·제품 보관정책은 여전히 미검증이다.
+
+### 웹 Origin·메서드·재업로드 경계
+
+선택 입력 `--origin-file`에 개발 FE의 HTTPS Origin만 담은 0600 파일을 지정하면,
+기본 시험과 별도로 고유 합성 객체 하나의 OPTIONS(PUT, Content-Type), Origin을 동반한
+PUT/GET/HEAD의 CORS·ETag 노출, GET 서명을 PUT으로 재사용했을 때의 거절,
+같은 키 재업로드 거절과 원본 불변을 확인하고 삭제한다. 파일값·서명 URL은 출력하지 않는다.
+OCI가 권한을 숨기는 404 NoSuchBucket도 재업로드 거절로 취급하지만 원본 불변을 함께 요구한다.
+
+2026-11-07 실제 개발 Origin 시험: OPTIONS·PUT·GET·HEAD 모두200, Origin/PUT/Content-Type
+허용과 ETag 노출 확인. 메서드 변경은403 SignatureDoesNotMatch, 같은 키 재업로드는404
+NoSuchBucket였고 원본은 그대로였다. 시험 객체 삭제 후404 확인. 최초 시험기는 재업로드403만
+예상해 종료1로 기록했으며, 관찰된404 경계는 합성 회귀시험으로 보완했다. 실제 요청을 반복해
+성공 기록으로 바꾸지 않았다. 이는 HTTP CORS 계약 확인이며 브라우저 UI/업무 업로드 E2E는 아니다.
+
+[OCI 공식 FAQ](https://www.oracle.com/cloud/storage/object-storage/faq/)에 따르면 S3 호환 API의
+CORS 응답 헤더는 고정이며 변경할 수 없다. 서버 간 요청에는 CORS가 필요하지 않으며,
+웹 직접 업로드는 실제 Origin과 사용 메서드·헤더의 호환성을 확인한다. AWS의 버킷 CORS
+설정 기능이 OCI에도 있다고 가정하지 않는다. 정책·키·앱 설정은 이 시험에서 변경하지 않는다.
