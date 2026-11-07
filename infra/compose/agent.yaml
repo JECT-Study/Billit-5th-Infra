@@ -45,6 +45,7 @@ services:
       OBS_PUSH_USER: ${OBS_PUSH_USER:-ject-agent}
       PROBE_PROD_URL: ${PROBE_PROD_URL:-}
       PROBE_DEV_URL: ${PROBE_DEV_URL:-}
+      PROBE_DEV_FE_URL: ${PROBE_DEV_FE_URL:-}
     secrets: [obs_push_password]
     volumes:
       - /etc/ject/alloy:/etc/alloy:ro

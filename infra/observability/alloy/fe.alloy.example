@@ -1,0 +1,25 @@
+// FE 개발 배포 후 dev VM에만 fe.alloy로 설치한다. BE /readyz와 별도로 감시한다.
+// PROBE_DEV_FE_URL에는 실제 개발 HTTPS /healthz 주소를 지정한다.
+prometheus.exporter.blackbox "frontend" {
+  config = "{ modules: { https_fe: { prober: http, timeout: 10s, http: { valid_status_codes: [200], fail_if_not_ssl: true, no_follow_redirects: true, preferred_ip_protocol: ip4, fail_if_body_not_matches_regexp: ['^ok[[:space:]]*$'] } } } }"
+  target {
+    name    = "dev-fe"
+    address = sys.env("PROBE_DEV_FE_URL")
+    module  = "https_fe"
+  }
+}
+
+discovery.relabel "frontend" {
+  targets = prometheus.exporter.blackbox.frontend.targets
+  rule {
+    target_label = "target"
+    replacement  = "dev-fe"
+  }
+}
+
+prometheus.scrape "frontend" {
+  targets         = discovery.relabel.frontend.output
+  scrape_interval = "60s"
+  scrape_timeout  = "15s"
+  forward_to      = [prometheus.relabel.host.receiver]
+}
