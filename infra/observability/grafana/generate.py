@@ -509,8 +509,9 @@ def overview():
          [q('sum by(host) (rate(node_network_receive_bytes_total{device!~"lo|veth.*|docker.*|br-.*|tailscale.*"}[5m]))', "{{host}} 수신"),
           q('-sum by(host) (rate(node_network_transmit_bytes_total{device!~"lo|veth.*|docker.*|br-.*|tailscale.*"}[5m]))', "{{host}} 송신")],
          w=8, unit="Bps", field={"custom": dict(TS_FIELD["custom"], axisSoftMin=None)}, options=TS_LIST)
-    b.ts("디스크 I/O 사용 시간", [q('sum by(host) (rate(node_disk_io_time_seconds_total[5m]))', "{{host}}")], w=8,
-         unit="percentunit", overrides=HOST_RENAMES, desc="디스크가 바빴던 시간 비율. 1(100%)에 붙어 있으면 I/O가 병목입니다.")
+    b.ts("디스크 I/O 사용 시간", [q('max by(host) (rate(node_disk_io_time_seconds_total[5m]))', "{{host}}")], w=8,
+         unit="percentunit", max_=1, overrides=HOST_RENAMES,
+         desc="가장 바쁜 디스크가 바빴던 시간 비율. 1(100%)에 붙어 있으면 I/O가 병목입니다.")
     b.ts("I/O 대기(iowait)", [q('100 * avg by(host) (rate(node_cpu_seconds_total{mode="iowait"}[5m]))', "{{host}}")], w=8,
          unit="percent", overrides=HOST_RENAMES, desc="CPU가 디스크를 기다린 비율. 재부팅·백업 때 잠깐 오르는 것은 정상입니다.")
 

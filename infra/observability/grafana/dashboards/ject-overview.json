@@ -1368,7 +1368,7 @@
       "type": "prometheus",
       "uid": "prom"
      },
-     "expr": "sum by(host) (rate(node_disk_io_time_seconds_total[5m]))",
+     "expr": "max by(host) (rate(node_disk_io_time_seconds_total[5m]))",
      "legendFormat": "{{host}}"
     }
    ],
@@ -1383,7 +1383,8 @@
       "spanNulls": false,
       "axisSoftMin": 0
      },
-     "unit": "percentunit"
+     "unit": "percentunit",
+     "max": 1
     },
     "overrides": [
      {
@@ -1439,7 +1440,7 @@
      "sort": "desc"
     }
    },
-   "description": "디스크가 바빴던 시간 비율. 1(100%)에 붙어 있으면 I/O가 병목입니다."
+   "description": "가장 바쁜 디스크가 바빴던 시간 비율. 1(100%)에 붙어 있으면 I/O가 병목입니다."
   },
   {
    "type": "timeseries",
