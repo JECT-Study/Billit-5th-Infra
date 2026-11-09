@@ -9,12 +9,70 @@
  "version": 1,
  "editable": false,
  "refresh": "1m",
+ "graphTooltip": 1,
+ "liveNow": false,
  "time": {
   "from": "now-6h",
   "to": "now"
  },
+ "timepicker": {
+  "refresh_intervals": [
+   "30s",
+   "1m",
+   "5m",
+   "15m"
+  ]
+ },
+ "links": [
+  {
+   "title": "JECT 대시보드",
+   "type": "dashboards",
+   "tags": [
+    "ject"
+   ],
+   "asDropdown": true,
+   "includeVars": false,
+   "keepTime": true,
+   "targetBlank": false,
+   "icon": "external link"
+  },
+  {
+   "title": "추적 검색(Tempo·개발)",
+   "type": "link",
+   "url": "/explore?schemaVersion=1&panes=%7B%22t%22:%7B%22datasource%22:%22ject-tempo-dev%22,%22queries%22:%5B%7B%22refId%22:%22A%22,%22datasource%22:%7B%22type%22:%22tempo%22,%22uid%22:%22ject-tempo-dev%22%7D,%22queryType%22:%22traceqlSearch%22,%22limit%22:20%7D%5D,%22range%22:%7B%22from%22:%22now-1h%22,%22to%22:%22now%22%7D%7D%7D",
+   "icon": "info",
+   "keepTime": false,
+   "targetBlank": false,
+   "tooltip": "개발 인프라의 OpenTelemetry 추적. 실제 앱 계측 연결 전에는 합성 시험 추적만 있습니다."
+  }
+ ],
  "templating": {
   "list": [
+   {
+    "name": "env",
+    "label": "환경",
+    "type": "query",
+    "datasource": {
+     "type": "loki",
+     "uid": "loki"
+    },
+    "query": "label_values(env)",
+    "definition": "label_values(env)",
+    "refresh": 2,
+    "includeAll": true,
+    "multi": true,
+    "sort": 1,
+    "allValue": ".+",
+    "current": {
+     "selected": true,
+     "text": [
+      "All"
+     ],
+     "value": [
+      "$__all"
+     ]
+    }
+   },
    {
     "name": "host",
     "label": "서버",
@@ -28,6 +86,7 @@
     "refresh": 2,
     "includeAll": true,
     "multi": true,
+    "sort": 1,
     "allValue": ".+",
     "current": {
      "selected": true,
@@ -52,6 +111,7 @@
     "refresh": 2,
     "includeAll": true,
     "multi": true,
+    "sort": 1,
     "allValue": ".+",
     "current": {
      "selected": true,
@@ -68,7 +128,7 @@
  "panels": [
   {
    "type": "timeseries",
-   "title": "수준별 로그 수(5분)",
+   "title": "서비스별 로그 줄 수",
    "id": 1,
    "gridPos": {
     "x": 0,
@@ -87,19 +147,45 @@
       "type": "loki",
       "uid": "loki"
      },
-     "expr": "sum by(level) (count_over_time({host=~\"$host\", service=~\"$service\"}[5m]))",
-     "legendFormat": "{{level}}"
+     "expr": "sum by(service) (count_over_time({env=~\"$env\", host=~\"$host\", service=~\"$service\"} [$__auto]))",
+     "legendFormat": "{{service}}"
     }
    ],
    "fieldConfig": {
-    "defaults": {},
+    "defaults": {
+     "custom": {
+      "drawStyle": "bars",
+      "lineWidth": 1,
+      "fillOpacity": 70,
+      "showPoints": "never",
+      "stacking": {
+       "mode": "normal",
+       "group": "A"
+      },
+      "axisSoftMin": 0
+     },
+     "unit": "short"
+    },
     "overrides": []
    },
-   "options": {}
+   "options": {
+    "legend": {
+     "displayMode": "table",
+     "placement": "right",
+     "showLegend": true,
+     "calcs": [
+      "sum"
+     ]
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   }
   },
   {
    "type": "timeseries",
-   "title": "Nginx 5xx(5분)",
+   "title": "오류로 보이는 로그(단어 기준, 관측 도구 제외)",
    "id": 2,
    "gridPos": {
     "x": 12,
@@ -118,23 +204,182 @@
       "type": "loki",
       "uid": "loki"
      },
-     "expr": "sum by(host) (count_over_time({service=\"nginx\", host=~\"$host\"} | json | status >= 500 [5m]))",
-     "legendFormat": "{{host}}"
+     "expr": "sum by(service) (count_over_time({env=~\"$env\", host=~\"$host\", service=~\"$service\", service!~\"tempo|loki|grafana|prometheus\"} |~ \"(?i)(error|exception|fatal|panic)\" [$__auto]))",
+     "legendFormat": "{{service}}"
     }
    ],
    "fieldConfig": {
-    "defaults": {},
+    "defaults": {
+     "custom": {
+      "drawStyle": "bars",
+      "lineWidth": 1,
+      "fillOpacity": 70,
+      "showPoints": "never",
+      "stacking": {
+       "mode": "normal",
+       "group": "A"
+      },
+      "axisSoftMin": 0
+     },
+     "unit": "short"
+    },
     "overrides": []
    },
-   "options": {}
+   "options": {
+    "legend": {
+     "displayMode": "table",
+     "placement": "right",
+     "showLegend": true,
+     "calcs": [
+      "sum"
+     ]
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "description": "error·exception·fatal·panic 단어가 들어간 줄. 관측 도구(Tempo 등)는 평상시에도 이런 단어를 남겨 뺐습니다(로그 본문에서는 보임). 앱이 JSON 로그 수준(level)을 남기면 아래 '로그 수준별'이 더 정확합니다."
   },
   {
-   "type": "logs",
-   "title": "로그(민감정보는 수집 단계에서 가림)",
+   "type": "timeseries",
+   "title": "Nginx 상태 코드별 요청",
    "id": 3,
    "gridPos": {
     "x": 0,
     "y": 7,
+    "w": 12,
+    "h": 7
+   },
+   "datasource": {
+    "type": "loki",
+    "uid": "loki"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "loki",
+      "uid": "loki"
+     },
+     "expr": "sum by(code) (count_over_time({service=\"nginx\", env=~\"$env\", host=~\"$host\"} | json code=\"status\" | __error__=\"\" [$__auto]))",
+     "legendFormat": "{{code}}"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "custom": {
+      "drawStyle": "bars",
+      "lineWidth": 1,
+      "fillOpacity": 70,
+      "showPoints": "never",
+      "stacking": {
+       "mode": "normal",
+       "group": "A"
+      },
+      "axisSoftMin": 0
+     },
+     "unit": "short"
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": "5.."
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "red"
+        }
+       }
+      ]
+     }
+    ]
+   },
+   "options": {
+    "legend": {
+     "displayMode": "table",
+     "placement": "right",
+     "showLegend": true,
+     "calcs": [
+      "sum"
+     ]
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "description": "접속 시험(1분마다)도 포함합니다. 444는 알 수 없는 주소로 들어온 요청을 끊은 것입니다."
+  },
+  {
+   "type": "timeseries",
+   "title": "로그 수준별(앱 JSON 로그만 · 실제 BE 배포 후 표시)",
+   "id": 4,
+   "gridPos": {
+    "x": 12,
+    "y": 7,
+    "w": 12,
+    "h": 7
+   },
+   "datasource": {
+    "type": "loki",
+    "uid": "loki"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "loki",
+      "uid": "loki"
+     },
+     "expr": "sum by(level) (count_over_time({env=~\"$env\", host=~\"$host\", service=~\"$service\", level=~\".+\"} [$__auto]))",
+     "legendFormat": "{{level}}"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "custom": {
+      "drawStyle": "bars",
+      "lineWidth": 1,
+      "fillOpacity": 70,
+      "showPoints": "never",
+      "stacking": {
+       "mode": "normal",
+       "group": "A"
+      },
+      "axisSoftMin": 0
+     },
+     "unit": "short"
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "table",
+     "placement": "right",
+     "showLegend": true,
+     "calcs": [
+      "sum"
+     ]
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "description": "Spring Boot(ECS) 로그의 level 값으로 나눕니다. 실제 BE 앱 배포 전에는 비어 있습니다. 「운영 오류 로그 급증」 경보도 이 값을 씁니다."
+  },
+  {
+   "type": "logs",
+   "title": "로그 본문",
+   "id": 5,
+   "gridPos": {
+    "x": 0,
+    "y": 14,
     "w": 24,
     "h": 16
    },
@@ -149,7 +394,7 @@
       "type": "loki",
       "uid": "loki"
      },
-     "expr": "{host=~\"$host\", service=~\"$service\"}"
+     "expr": "{env=~\"$env\", host=~\"$host\", service=~\"$service\"}"
     }
    ],
    "fieldConfig": {
@@ -160,16 +405,19 @@
     "showTime": true,
     "wrapLogMessage": true,
     "sortOrder": "Descending",
-    "enableLogDetails": true
-   }
+    "enableLogDetails": true,
+    "prettifyLogMessage": false,
+    "dedupStrategy": "none"
+   },
+   "description": "Loki 7일 보관. 비밀번호·토큰·이메일·전화번호 등 주요 패턴은 수집 단계에서 가립니다(모양이 정해지지 않은 값은 못 가림)."
   },
   {
    "type": "logs",
-   "title": "JECT 작업(백업·복원 시험·인증서·알림 중계)",
-   "id": 4,
+   "title": "JECT 작업(백업·복원 시험·인증서 갱신·알림 중계)",
+   "id": 6,
    "gridPos": {
     "x": 0,
-    "y": 23,
+    "y": 30,
     "w": 24,
     "h": 10
    },
@@ -184,7 +432,7 @@
       "type": "loki",
       "uid": "loki"
      },
-     "expr": "{job=\"systemd\"}"
+     "expr": "{job=\"systemd\", host=~\"$host\"}"
     }
    ],
    "fieldConfig": {
@@ -194,8 +442,10 @@
    "options": {
     "showTime": true,
     "wrapLogMessage": true,
-    "sortOrder": "Descending"
-   }
+    "sortOrder": "Descending",
+    "enableLogDetails": true
+   },
+   "description": "서비스 라벨이 없는 systemd 작업 로그라 '서비스' 선택과 관계없이 보입니다. 백업은 운영 DB 서버, 인증서 갱신은 운영 앱 서버에서 돕니다."
   }
  ]
 }

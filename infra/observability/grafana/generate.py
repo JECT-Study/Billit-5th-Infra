@@ -241,58 +241,170 @@ def write_rules():
     return path
 
 
+
+
 # ---- 대시보드 -----------------------------------------------------------------
+# 원칙: 지금 실제로 들어오는 지표·로그만 기본 화면에 둔다. 실제 BE 앱 연결 전에는 데이터가 생길 수 없는
+# Spring Boot 지표는 접힌 행에 두고, 비어 있는 이유를 글 패널로 적는다(빈 그래프를 고장으로 오해하지 않게).
+
+DS_TYPE = {PROM: "prometheus", LOKI: "loki"}
+TEMPO = "ject-tempo-dev"   # 개발 VM에만 opt-in 설치(otel/README.md). 없으면 링크만 열리지 않는다.
+
+# 범례·통계에 보이는 이름. 라벨 값(host·target)은 바꾸지 않고 표시 이름만 바꾼다.
+HOST_NAMES = {"prod-app": "운영 앱 서버", "prod-data": "운영 DB 서버", "dev": "개발·모니터링 서버"}
+TARGET_NAMES = {"prod": "운영 API (/readyz)", "dev": "개발 API (/readyz)", "dev-fe": "개발 웹 FE (/healthz)"}
+
+GREEN, ORANGE, RED, BLUE = "green", "orange", "red", "blue"
+
+
+def thresholds(*steps):
+    """steps: (값, 색) … 첫 값은 None(기본색)."""
+    return {"mode": "absolute", "steps": [{"color": c, "value": v} for v, c in steps]}
+
+
+def mapping(**kv):
+    """값 → 글자·색. mapping(**{"0": ("끊김", RED), "1": ("정상", GREEN)})"""
+    return [{"type": "value", "options": {k: {"text": t, "color": c, "index": i}
+                                          for i, (k, (t, c)) in enumerate(kv.items())}}]
+
+
+UPDOWN = mapping(**{"0": ("끊김", RED), "1": ("정상", GREEN)})
+OKFAIL = mapping(**{"0": ("실패", RED), "1": ("성공", GREEN)})
+
+
+def renames(names):
+    return [{"matcher": {"id": "byName", "options": k},
+             "properties": [{"id": "displayName", "value": v}]} for k, v in names.items()]
+
+
+HOST_RENAMES = renames(HOST_NAMES)
+TARGET_RENAMES = renames(TARGET_NAMES)
+
+STAT = {"reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": False}, "colorMode": "background",
+        "graphMode": "none", "textMode": "value_and_name", "justifyMode": "center", "orientation": "auto",
+        "wideLayout": True, "showPercentChange": False}
+STAT_SPARK = dict(STAT, graphMode="area", colorMode="value")
+TS = {"legend": {"displayMode": "table", "placement": "bottom", "showLegend": True, "calcs": ["lastNotNull", "max"]},
+      "tooltip": {"mode": "multi", "sort": "desc"}}
+TS_FIELD = {"custom": {"drawStyle": "line", "lineWidth": 2, "fillOpacity": 8, "gradientMode": "opacity",
+                       "showPoints": "never", "spanNulls": False, "axisSoftMin": 0}}
+TS_LIST = dict(TS, legend={"displayMode": "list", "placement": "bottom", "showLegend": True, "calcs": []})
+TS_NOLEGEND = dict(TS, legend={"displayMode": "list", "placement": "bottom", "showLegend": False, "calcs": []})
+TS_SUM_RIGHT = dict(TS, legend={"displayMode": "table", "placement": "right", "showLegend": True, "calcs": ["sum"]})
+# 띄엄띄엄 들어오는 로그 기반 값은 선이 이어지지 않으므로 점으로 그린다.
+POINTS_FIELD = {"custom": {"drawStyle": "points", "pointSize": 6, "showPoints": "always", "axisSoftMin": 0}}
+BARS_FIELD = {"custom": {"drawStyle": "bars", "lineWidth": 1, "fillOpacity": 70, "showPoints": "never",
+                         "stacking": {"mode": "normal", "group": "A"}, "axisSoftMin": 0}}
+
+
+def line_thresholds(field, steps):
+    """그래프에 기준선(점선)을 함께 그린다."""
+    f = json.loads(json.dumps(field))
+    f["custom"]["thresholdsStyle"] = {"mode": "dashed"}
+    f["thresholds"] = thresholds(*steps)
+    return f
+
 
 class Board:
-    def __init__(self, uid, title, tags, description=None):
+    def __init__(self, uid, title, tags, description=None, time_from="now-6h", links=None):
         self.uid, self.title, self.tags = uid, title, tags
         self.description = description
+        self.time_from = time_from
+        self.links = links or []
         self.panels, self.x, self.y, self.row_h, self.pid = [], 0, 0, 0, 1
         self.templating = []
+        self.folded = None   # 접힌 행: 이후 패널을 그 행 안에 넣는다
+
+    def _newline(self):
+        if self.x:
+            self.x, self.y = 0, self.y + self.row_h
+        self.row_h = 0
 
     def _place(self, w, h):
         if self.x + w > 24:
-            self.x, self.y = 0, self.y + self.row_h
-            self.row_h = 0
+            self._newline()
         pos = {"x": self.x, "y": self.y, "w": w, "h": h}
         self.x += w
         self.row_h = max(self.row_h, h)
         return pos
 
-    def row(self, title):
-        if self.x:
-            self.x, self.y = 0, self.y + self.row_h
-        self.panels.append({"type": "row", "title": title, "id": self.pid, "collapsed": False,
-                            "gridPos": {"x": 0, "y": self.y, "w": 24, "h": 1}, "panels": []})
+    def row(self, title, collapsed=False):
+        self._newline()
+        if self.folded is not None:
+            # 접힌 행의 패널은 펼칠 때만 자리를 차지한다 → 다음 행은 접힌 행 바로 아래
+            self.y = self.folded["gridPos"]["y"] + 1
+            self.folded = None
+        r = {"type": "row", "title": title, "id": self.pid, "collapsed": collapsed,
+             "gridPos": {"x": 0, "y": self.y, "w": 24, "h": 1}, "panels": []}
+        self.panels.append(r)
         self.pid += 1
         self.y += 1
-        self.row_h = 0
+        if collapsed:
+            self.folded = r
 
-    def panel(self, kind, title, targets, w=8, h=8, unit=None, ds=PROM, options=None, field=None, desc=None):
+    def _add(self, p):
+        (self.folded["panels"] if self.folded is not None else self.panels).append(p)
+        self.pid += 1
+
+    def panel(self, kind, title, targets, w=8, h=8, unit=None, ds=PROM, options=None, field=None, desc=None,
+              overrides=None, decimals=None, max_=None, min_=None, interval=None):
+        defaults = json.loads(json.dumps(field or {}))
+        if unit:
+            defaults["unit"] = unit
+        if decimals is not None:
+            defaults["decimals"] = decimals
+        if max_ is not None:
+            defaults["max"] = max_
+        if min_ is not None:
+            defaults["min"] = min_
         p = {
             "type": kind,
             "title": title,
             "id": self.pid,
             "gridPos": self._place(w, h),
-            "datasource": {"type": "prometheus" if ds == PROM else "loki", "uid": ds},
+            "datasource": {"type": DS_TYPE[ds], "uid": ds},
             "targets": [
-                dict({"refId": chr(65 + i), "datasource": {"type": "prometheus" if ds == PROM else "loki", "uid": ds}}, **t)
+                dict({"refId": chr(65 + i), "datasource": {"type": DS_TYPE[ds], "uid": ds}}, **t)
                 for i, t in enumerate(targets)
             ],
-            "fieldConfig": {"defaults": dict({"unit": unit} if unit else {}, **(field or {})), "overrides": []},
+            "fieldConfig": {"defaults": defaults, "overrides": overrides or []},
             "options": options or {},
         }
+        if interval:
+            p["interval"] = interval
         if desc:
             p["description"] = desc
-        self.panels.append(p)
-        self.pid += 1
+        self._add(p)
+
+    def ts(self, title, targets, w=12, h=8, unit=None, ds=PROM, field=None, **kw):
+        self.panel("timeseries", title, targets, w=w, h=h, unit=unit, ds=ds,
+                   options=kw.pop("options", TS), field=field or TS_FIELD, **kw)
+
+    def stat(self, title, targets, w=6, h=4, unit=None, ds=PROM, field=None, spark=False, **kw):
+        self.panel("stat", title, targets, w=w, h=h, unit=unit, ds=ds,
+                   options=kw.pop("options", STAT_SPARK if spark else STAT), field=field, **kw)
+
+    def text(self, title, md, w=24, h=4):
+        self._add({"type": "text", "title": title, "id": self.pid, "gridPos": self._place(w, h),
+                   "options": {"mode": "markdown", "content": md}})
+
+    def alertlist(self, title, w=24, h=6, desc=None):
+        p = {"type": "alertlist", "title": title, "id": self.pid, "gridPos": self._place(w, h),
+             "options": {"viewMode": "list", "groupMode": "default", "groupBy": [], "maxItems": 20,
+                         "sortOrder": 1, "dashboardAlerts": False, "alertName": "",
+                         "alertInstanceLabelFilter": "", "datasource": "grafana",
+                         "stateFilter": {"firing": True, "pending": True, "noData": False,
+                                         "normal": False, "error": True, "recovering": True}}}
+        if desc:
+            p["description"] = desc
+        self._add(p)
 
     def var(self, name, query, ds=PROM, label=None, include_all=True):
         self.templating.append({
             "name": name, "label": label or name, "type": "query",
-            "datasource": {"type": "prometheus" if ds == PROM else "loki", "uid": ds},
+            "datasource": {"type": DS_TYPE[ds], "uid": ds},
             "query": query, "definition": query if isinstance(query, str) else "",
-            "refresh": 2, "includeAll": include_all, "multi": True,
+            "refresh": 2, "includeAll": include_all, "multi": True, "sort": 1,
             # Loki는 빈 값도 맞는 선택자({a=~".*"})만으로는 조회를 거부한다 → "전체"를 .+로
             "allValue": ".+" if ds == LOKI else ".*",
             "current": {"selected": True, "text": ["All"], "value": ["$__all"]},
@@ -303,7 +415,10 @@ class Board:
             **({"description": self.description} if self.description else {}),
             "uid": self.uid, "title": self.title, "tags": self.tags, "timezone": "Asia/Seoul",
             "schemaVersion": 39, "version": 1, "editable": False, "refresh": "1m",
-            "time": {"from": "now-6h", "to": "now"},
+            "graphTooltip": 1, "liveNow": False,
+            "time": {"from": self.time_from, "to": "now"},
+            "timepicker": {"refresh_intervals": ["30s", "1m", "5m", "15m"]},
+            "links": self.links,
             "templating": {"list": self.templating}, "panels": self.panels,
         }
 
@@ -316,86 +431,283 @@ def q(expr, legend=None, **kw):
     return t
 
 
-STAT = {"reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": False}, "colorMode": "background",
-        "graphMode": "none", "textMode": "value_and_name"}
+def board_links():
+    explore = ('/explore?schemaVersion=1&panes=%7B%22t%22:%7B%22datasource%22:%22' + TEMPO +
+               '%22,%22queries%22:%5B%7B%22refId%22:%22A%22,%22datasource%22:%7B%22type%22:%22tempo%22,'
+               '%22uid%22:%22' + TEMPO + '%22%7D,%22queryType%22:%22traceqlSearch%22,%22limit%22:20%7D%5D,'
+               '%22range%22:%7B%22from%22:%22now-1h%22,%22to%22:%22now%22%7D%7D%7D')
+    return [
+        {"title": "JECT 대시보드", "type": "dashboards", "tags": ["ject"], "asDropdown": True,
+         "includeVars": False, "keepTime": True, "targetBlank": False, "icon": "external link"},
+        {"title": "추적 검색(Tempo·개발)", "type": "link", "url": explore, "icon": "info", "keepTime": False,
+         "targetBlank": False, "tooltip": "개발 인프라의 OpenTelemetry 추적. 실제 앱 계측 연결 전에는 합성 시험 추적만 있습니다."},
+    ]
+
+
+# Nginx 접근 로그(JSON). 로그의 host 필드는 Loki의 host 라벨과 이름이 겹쳐 domain으로 받는다.
+NGINX = '{service="nginx", host=~"$host"}'
+NOT_PROBE = '| __error__="" | ua !~ "Blackbox Exporter.*"'  # JSON이 아닌 줄(Nginx 자체 오류 메시지)은 뺀다
+HEALTH_PATHS = '| path !~ "/readyz|/healthz|/nginx-health"'
+
+HOST_LEGEND_NOTE = ("서버 이름: 운영 앱 서버(prod-app, 공개 Nginx·운영 앱), 운영 DB 서버(prod-data, PostgreSQL·Redis), "
+                    "개발·모니터링 서버(dev, 개발 앱·DB·Redis와 Prometheus·Loki·Grafana).")
 
 
 def overview():
-    b = Board("ject-overview", "JECT 개요", ["ject"])
-    b.row("서버 (Node Exporter)")
-    b.panel("stat", "지표 수집", [q('last_over_time(up{job="node"}[2m])', "{{host}}")], w=6, h=5, options=STAT,
-            field={"mappings": [{"type": "value", "options": {"0": {"text": "끊김", "color": "red"}, "1": {"text": "정상", "color": "green"}}}]})
-    b.panel("stat", "디스크 사용률(/)", [q('100 * (1 - node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"})', "{{host}}")],
-            w=6, h=5, unit="percent", options=STAT,
-            field={"thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": None}, {"color": "orange", "value": 80}, {"color": "red", "value": 90}]}})
-    b.panel("stat", "가용 메모리", [q('100 * node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes', "{{host}}")],
-            w=6, h=5, unit="percent", options=STAT,
-            field={"thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": None}, {"color": "orange", "value": 15}, {"color": "green", "value": 30}]}})
-    b.panel("stat", "가동 시간", [q('time() - node_boot_time_seconds', "{{host}}")], w=6, h=5, unit="s", options=STAT)
-    b.panel("timeseries", "CPU 사용률(iowait 제외)·I/O 대기", [q('100 * (1 - avg by(host) (sum by(host, cpu) (rate(node_cpu_seconds_total{mode=~"idle|iowait"}[5m]))))', "{{host}} 사용"),
-                                                    q('100 * avg by(host) (rate(node_cpu_seconds_total{mode="iowait"}[5m]))', "{{host}} iowait")], unit="percent")
-    b.panel("timeseries", "가용 메모리", [q('node_memory_MemAvailable_bytes', "{{host}}")], unit="bytes")
-    b.panel("timeseries", "디스크 사용량(/)", [q('node_filesystem_size_bytes{mountpoint="/"} - node_filesystem_avail_bytes{mountpoint="/"}', "{{host}}")], unit="bytes")
-    b.panel("timeseries", "네트워크 수신", [q('sum by(host) (rate(node_network_receive_bytes_total{device!~"lo|veth.*|docker.*|br-.*"}[5m]))', "{{host}}")], unit="Bps")
-    b.panel("timeseries", "네트워크 송신", [q('sum by(host) (rate(node_network_transmit_bytes_total{device!~"lo|veth.*|docker.*|br-.*"}[5m]))', "{{host}}")], unit="Bps")
-    b.panel("timeseries", "디스크 I/O 사용 시간", [q('sum by(host) (rate(node_disk_io_time_seconds_total[5m]))', "{{host}}")], unit="percentunit")
+    b = Board("ject-overview", "JECT 개요", ["ject"], links=board_links())
+    b.row("한눈에 보기")
+    b.stat("서버 지표 수집", [q('last_over_time(up{job="node"}[2m])', "{{host}}")], w=6,
+           field={"mappings": UPDOWN, "color": {"mode": "thresholds"}, "thresholds": thresholds((None, RED), (1, GREEN))},
+           overrides=HOST_RENAMES, desc="2분 안에 Node Exporter 지표가 들어왔는지. 끊김이면 VM·수집기·네트워크를 확인합니다. " + HOST_LEGEND_NOTE)
+    b.stat("공인 주소 접속 시험", [q('probe_success', "{{target}}")], w=7,
+           field={"mappings": OKFAIL, "color": {"mode": "thresholds"}, "thresholds": thresholds((None, RED), (1, GREEN))},
+           overrides=TARGET_RENAMES,
+           desc="개발·모니터링 서버가 1분마다 공인 HTTPS 주소에 접속합니다(OCI Health Checks 대신). API는 /readyz(DB·Redis 연결 포함), 웹은 /healthz.")
+    b.stat("인증서 남은 기간(가장 짧은 것)", [q('min((probe_ssl_earliest_cert_expiry - time()) / 86400)', "남은 일수")], w=4,
+           unit="suffix:일", decimals=0, field={"thresholds": thresholds((None, RED), (14, ORANGE), (30, GREEN))},
+           desc="자동 갱신은 만료 30일 전부터 시도합니다. 14일 미만이면 경보가 울립니다. 지금은 임시 이름(sslip.io) 인증서입니다.")
+    b.stat("마지막 백업 성공 후", [q('time() - ject_backup_last_success_timestamp_seconds', "경과")], w=4,
+           unit="s", decimals=1, field={"thresholds": thresholds((None, GREEN), (90000, ORANGE), (93600, RED))},
+           desc="운영 DB는 매일 04:00 KST에 백업합니다. 26시간을 넘으면 경보가 울립니다.")
+    b.stat("월간 복원 시험", [q('ject_restore_test_last_run_success', "마지막 결과")], w=3,
+           field={"mappings": OKFAIL, "color": {"mode": "thresholds"}, "thresholds": thresholds((None, RED), (1, GREEN))},
+           desc="매월 1일 05:00 KST에 백업을 격리 환경에 복원해 봅니다.")
+    b.alertlist("지금 울리는 경보", h=4,
+                desc="발생·대기·오류 상태인 Grafana 경보만 보입니다. 비어 있으면 울리는 경보가 없다는 뜻입니다. "
+                     "실제 앱 연결 전이라 지표가 없는 경보(수집 없음)는 여기서 뺐습니다.")
+
+    b.row("서버 자원")
+    cpu = '100 * (1 - avg by(host) (sum by(host, cpu) (rate(node_cpu_seconds_total{mode=~"idle|iowait"}[5m]))))'
+    mem = '100 * (1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)'
+    disk = '100 * (1 - node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"})'
+    pct_field = {"thresholds": thresholds((None, GREEN), (80, ORANGE), (90, RED)), "min": 0, "max": 100}
+    b.panel("bargauge", "CPU 사용률", [q(cpu, "{{host}}")], w=6, h=6, unit="percent", decimals=0,
+            options={"orientation": "horizontal", "displayMode": "gradient", "showUnfilled": True,
+                     "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": False}},
+            field=dict(pct_field, thresholds=thresholds((None, GREEN), (70, ORANGE), (85, RED))), overrides=HOST_RENAMES,
+            desc="I/O 대기(iowait)는 빼고 계산합니다. 서버당 1 OCPU라 10분 넘게 85%면 경보가 울립니다.")
+    b.panel("bargauge", "메모리 사용률", [q(mem, "{{host}}")], w=6, h=6, unit="percent", decimals=0,
+            options={"orientation": "horizontal", "displayMode": "gradient", "showUnfilled": True,
+                     "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": False}},
+            field=dict(pct_field, thresholds=thresholds((None, GREEN), (75, ORANGE), (85, RED))), overrides=HOST_RENAMES,
+            desc="캐시를 뺀 실제 사용률(1 - 가용/전체). 가용 메모리가 15% 미만(사용률 85% 초과)이면 경보가 울립니다.")
+    b.panel("bargauge", "디스크 사용률(/)", [q(disk, "{{host}}")], w=6, h=6, unit="percent", decimals=0,
+            options={"orientation": "horizontal", "displayMode": "gradient", "showUnfilled": True,
+                     "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": False}},
+            field=pct_field, overrides=HOST_RENAMES,
+            desc="무료 블록 200GB를 모두 써서 디스크를 늘릴 수 없습니다. 80%·90%에 경보, 여유 15% 미만이면 배포가 거부됩니다.")
+    b.stat("가동 시간", [q('time() - node_boot_time_seconds', "{{host}}")], w=6, h=6, unit="s", decimals=0,
+           options=dict(STAT, colorMode="none", orientation="horizontal"), overrides=HOST_RENAMES,
+           desc="마지막 재부팅 후 경과 시간.")
+    b.ts("CPU 사용률", [q(cpu, "{{host}}")], w=8, unit="percent",
+         field=line_thresholds(TS_FIELD, [(None, "transparent"), (85, RED)]), overrides=HOST_RENAMES, max_=100)
+    b.ts("메모리 사용률", [q(mem, "{{host}}")], w=8, unit="percent",
+         field=line_thresholds(TS_FIELD, [(None, "transparent"), (85, RED)]), overrides=HOST_RENAMES, max_=100)
+    b.ts("디스크 사용률(/)", [q(disk, "{{host}}")], w=8, unit="percent",
+         field=line_thresholds(TS_FIELD, [(None, "transparent"), (80, ORANGE), (90, RED)]), overrides=HOST_RENAMES, max_=100)
+    b.ts("네트워크 (위: 수신 · 아래: 송신)",
+         [q('sum by(host) (rate(node_network_receive_bytes_total{device!~"lo|veth.*|docker.*|br-.*|tailscale.*"}[5m]))', "{{host}} 수신"),
+          q('-sum by(host) (rate(node_network_transmit_bytes_total{device!~"lo|veth.*|docker.*|br-.*|tailscale.*"}[5m]))', "{{host}} 송신")],
+         w=8, unit="Bps", field={"custom": dict(TS_FIELD["custom"], axisSoftMin=None)}, options=TS_LIST)
+    b.ts("디스크 I/O 사용 시간", [q('sum by(host) (rate(node_disk_io_time_seconds_total[5m]))', "{{host}}")], w=8,
+         unit="percentunit", overrides=HOST_RENAMES, desc="디스크가 바빴던 시간 비율. 1(100%)에 붙어 있으면 I/O가 병목입니다.")
+    b.ts("I/O 대기(iowait)", [q('100 * avg by(host) (rate(node_cpu_seconds_total{mode="iowait"}[5m]))', "{{host}}")], w=8,
+         unit="percent", overrides=HOST_RENAMES, desc="CPU가 디스크를 기다린 비율. 재부팅·백업 때 잠깐 오르는 것은 정상입니다.")
+
     b.row("백업·복원 (운영 DB)")
-    b.panel("stat", "마지막 백업 성공 후", [q('time() - ject_backup_last_success_timestamp_seconds', "경과")], w=6, h=5, unit="s", options=STAT,
-            field={"thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": None}, {"color": "red", "value": 93600}]}})
-    b.panel("stat", "마지막 백업 결과", [q('ject_backup_last_run_success', "결과")], w=6, h=5, options=STAT,
-            field={"mappings": [{"type": "value", "options": {"0": {"text": "실패", "color": "red"}, "1": {"text": "성공", "color": "green"}}}]})
-    b.panel("stat", "마지막 백업 크기·소요", [q('ject_backup_last_success_bytes', "크기"), q('ject_backup_last_duration_seconds', "소요(초)")], w=6, h=5, options=STAT)
-    b.panel("stat", "마지막 복원 시험", [q('ject_restore_test_last_run_success', "결과")], w=6, h=5, options=STAT,
-            field={"mappings": [{"type": "value", "options": {"0": {"text": "실패", "color": "red"}, "1": {"text": "성공", "color": "green"}}}]})
-    b.row("공인 주소 시험·인증서 (개발·모니터링 VM → NAT → 공인 HTTPS)")
-    b.panel("stat", "접속 시험", [q('probe_success', "{{target}}")], w=8, h=5, options=STAT,
-            field={"mappings": [{"type": "value", "options": {"0": {"text": "실패", "color": "red"}, "1": {"text": "정상", "color": "green"}}}]})
-    b.panel("stat", "인증서 남은 기간", [q('(probe_ssl_earliest_cert_expiry - time()) / 86400', "{{target}}")], w=8, h=5, unit="d", options=STAT,
-            field={"thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": None}, {"color": "orange", "value": 14}, {"color": "green", "value": 30}]}})
-    b.panel("timeseries", "응답 시간", [q('probe_duration_seconds', "{{target}}")], w=8, h=5, unit="s")
-    b.row("관측 도구")
-    b.panel("timeseries", "Prometheus 시계열 수", [q('prometheus_tsdb_head_series', "series")], unit="short")
-    b.panel("timeseries", "Alloy 메트릭 전송 실패", [q('sum by(host) (rate(prometheus_remote_storage_samples_failed_total[5m]))', "{{host}}")], unit="short")
-    b.panel("timeseries", "Alloy 로그 전송 실패", [q('sum by(host) (rate(loki_write_dropped_entries_total[5m]))', "{{host}}")], unit="short")
+    b.stat("마지막 백업 결과", [q('ject_backup_last_run_success', "결과")], w=4,
+           field={"mappings": OKFAIL, "color": {"mode": "thresholds"}, "thresholds": thresholds((None, RED), (1, GREEN))})
+    b.stat("마지막 백업 성공 시각", [q('ject_backup_last_success_timestamp_seconds * 1000', "시각")], w=5, unit="dateTimeAsLocal",
+           options=dict(STAT, colorMode="none", textMode="value", text={"valueSize": 26}))
+    b.stat("백업 크기", [q('ject_backup_last_success_bytes', "압축본")], w=5, unit="bytes", options=dict(STAT, colorMode="none"))
+    b.stat("백업 소요 시간", [q('ject_backup_last_duration_seconds', "소요")], w=3, unit="s", options=dict(STAT, colorMode="none"))
+    b.stat("마지막 복원 시험", [q('ject_restore_test_last_run_success', "결과")], w=3,
+           field={"mappings": OKFAIL, "color": {"mode": "thresholds"}, "thresholds": thresholds((None, RED), (1, GREEN))})
+    b.stat("복원 시험 후 경과", [q('time() - ject_restore_test_last_run_timestamp_seconds', "경과")], w=4, unit="s", decimals=1,
+           field={"thresholds": thresholds((None, GREEN), (32 * 86400, ORANGE))},
+           desc="매월 1일 실행. 32일을 넘으면 경보가 울립니다. 최근 실행은 복원 성공 증거가 아니니 결과와 같이 봅니다.")
+    b.text("백업 보관", "비공개 Object Storage 버킷에 **최근 7일**을 보관하고, 최신 성공본 7개는 항상 남깁니다"
+           "(그래서 '최대 7일 후 반드시 삭제'는 아닙니다). 실패하면 경보가 울리고, 고친 뒤 "
+           "`sudo systemctl start ject-pg-backup`으로 다시 실행합니다.", w=24, h=3)
+
+    b.row("공인 주소 접속 시험·인증서 (개발·모니터링 서버 → NAT → 공인 HTTPS)")
+    b.panel("state-timeline", "접속 시험 이력", [q('probe_success', "{{target}}")], w=12, h=6,
+            options={"showValue": "never", "mergeValues": True, "alignValue": "center", "rowHeight": 0.8,
+                     "legend": {"showLegend": False}, "tooltip": {"mode": "single"}},
+            field={"mappings": OKFAIL, "color": {"mode": "thresholds"}, "thresholds": thresholds((None, RED), (1, GREEN)),
+                   "custom": {"fillOpacity": 80, "lineWidth": 0}},
+            overrides=TARGET_RENAMES, desc="빨간 구간이 접속 실패입니다.")
+    b.ts("응답 시간", [q('probe_duration_seconds', "{{target}}")], w=12, h=6, unit="s", overrides=TARGET_RENAMES, options=TS_LIST,
+         desc="DNS·TLS·응답까지 포함한 전체 시간. 서버가 춘천이라 해외에서는 더 느릴 수 있습니다.")
+    b.stat("HTTP 상태 코드", [q('probe_http_status_code', "{{target}}")], w=12, h=4, overrides=TARGET_RENAMES,
+           field={"thresholds": thresholds((None, RED), (200, GREEN), (300, ORANGE))}, options=dict(STAT, colorMode="value"))
+    b.stat("인증서 남은 기간", [q('(probe_ssl_earliest_cert_expiry - time()) / 86400', "{{target}}")], w=12, h=4, unit="suffix:일",
+           decimals=0, overrides=TARGET_RENAMES, field={"thresholds": thresholds((None, RED), (14, ORANGE), (30, GREEN))})
+
+    b.row("Redis (운영 DB 서버·개발 서버)")
+    rsel = '{job="integrations/redis"}'
+    b.stat("연결 상태", [q('redis_up' + rsel, "{{host}}")], w=4,
+           field={"mappings": UPDOWN, "color": {"mode": "thresholds"}, "thresholds": thresholds((None, RED), (1, GREEN))},
+           overrides=HOST_RENAMES, desc="관측 전용 제한 계정으로 접속해 확인합니다(앱 비밀번호를 쓰지 않음).")
+    b.stat("메모리 사용률(상한 대비)", [q('100 * redis_memory_used_bytes' + rsel + ' / (redis_memory_max_bytes' + rsel + ' > 0)', "{{host}}")],
+           w=5, unit="percent", decimals=1, overrides=HOST_RENAMES,
+           field={"thresholds": thresholds((None, GREEN), (70, ORANGE), (80, RED))},
+           desc="상한(maxmemory): 운영 384MiB, 개발 96MiB. 80%를 넘으면 경보가 울립니다. 지금 축출 정책은 캐시용(allkeys-lru)이라 꽉 차면 오래 안 쓴 키부터 지워집니다.")
+    b.stat("저장된 키", [q('sum by(host) (redis_db_keys' + rsel + ') or on(host) (0 * redis_up' + rsel + ')', "{{host}}")], w=5,
+           overrides=HOST_RENAMES, options=dict(STAT, colorMode="none"))
+    b.stat("접속 클라이언트", [q('redis_connected_clients' + rsel, "{{host}}")], w=5, overrides=HOST_RENAMES,
+           options=dict(STAT, colorMode="none"), desc="관측 계정 1개를 포함합니다.")
+    b.stat("축출된 키(24시간)", [q('increase(redis_evicted_keys_total' + rsel + '[24h])', "{{host}}")], w=5, decimals=0,
+           overrides=HOST_RENAMES, field={"thresholds": thresholds((None, GREEN), (1, ORANGE))},
+           desc="메모리가 꽉 차서 지워진 키. 0이 아니면 인증·잠금 키가 지워졌을 수 있으니 바로 확인합니다.")
+    b.ts("메모리 사용량·상한", [q('redis_memory_used_bytes' + rsel, "{{host}} 사용"), q('redis_memory_max_bytes' + rsel, "{{host}} 상한")],
+         w=8, unit="bytes", options=TS_LIST)
+    b.ts("초당 명령 수", [q('rate(redis_commands_processed_total' + rsel + '[5m])', "{{host}}")], w=8, unit="ops",
+         overrides=HOST_RENAMES, desc="지금은 관측 계정의 조회가 대부분입니다.")
+    b.ts("만료·축출 키(5분)", [q('increase(redis_expired_keys_total' + rsel + '[5m])', "{{host}} 만료"),
+                             q('increase(redis_evicted_keys_total' + rsel + '[5m])', "{{host}} 축출")], w=8, unit="short", options=TS_LIST)
+
+    b.row("관측 도구 자체", collapsed=True)
+    b.stat("관측 구성요소", [q('up{job="obs"}', "{{component}}")], w=6,
+           field={"mappings": UPDOWN, "color": {"mode": "thresholds"}, "thresholds": thresholds((None, RED), (1, GREEN))})
+    b.stat("Prometheus 저장 용량", [q('prometheus_tsdb_storage_blocks_bytes', "디스크 블록")], w=6, unit="bytes",
+           options=dict(STAT, colorMode="none"), desc="보존 14일·최대 8GiB 중 먼저 닿는 한도까지 남깁니다.")
+    b.stat("Prometheus 시계열 수", [q('prometheus_tsdb_head_series', "현재")], w=6, options=dict(STAT, colorMode="none"))
+    b.stat("수집기 메모리(Alloy)", [q('process_resident_memory_bytes{job="integrations/self"}', "{{host}}")], w=6, unit="bytes",
+           overrides=HOST_RENAMES, options=dict(STAT, colorMode="none"))
+    b.ts("메트릭 전송 실패(Alloy → Prometheus)", [q('sum by(host) (rate(prometheus_remote_storage_samples_failed_total[5m]))', "{{host}}")],
+         w=12, unit="short", overrides=HOST_RENAMES, desc="0이 정상입니다.")
+    b.ts("로그 전송 폐기(Alloy → Loki)", [q('sum by(host) (rate(loki_write_dropped_entries_total[5m]))', "{{host}}")],
+         w=12, unit="short", overrides=HOST_RENAMES, desc="0이 정상입니다.")
     return b
 
 
 def app():
     b = Board("ject-app", "JECT 앱", ["ject"],
-              "수집 성공은 업무 정상 판정이 아닙니다. HTTP/JVM 지표 미연결·요청 없음으로 인한 No data는 0이나 정상과 구분해야 합니다.")
-    b.var("host", 'label_values(up{job="app"}, host)', label="서버")
+              "수집 성공은 업무 정상 판정이 아닙니다. HTTP/JVM 지표 미연결·요청 없음으로 인한 No data는 0이나 정상과 구분해야 합니다.",
+              links=board_links())
+    b.var("host", 'label_values(up{job="app"}, host)', label="앱 서버")
+    b.text("지금 보이는 것", (
+        "- **웹 요청(Nginx 로그 기준)** 행은 지금도 실제 요청으로 채워집니다. 접속 시험(Blackbox)은 요청 수에서 뺐습니다.\n"
+        "- 개발·운영 BE는 아직 **배포 시험용 앱(스모크 앱)** 입니다. 실제 BE(Spring Boot)가 관리 포트 8081의 "
+        "`/actuator/prometheus`를 열고 배포되면 맨 아래 **Spring Boot 지표** 행(접혀 있음)이 채워집니다. 그 전까지 비어 있는 것이 정상입니다.\n"
+        "- 같은 시기 「앱 지표 끊김」 외 HTTP·DB 경보는 지표가 없어 '수집 없음'으로 보입니다."), h=4)
+
     b.row("상태")
-    b.panel("stat", "앱 지표 수집", [q('last_over_time(up{job="app", host=~"$host"}[2m])', "{{host}}")], w=6, h=5, options=STAT,
-            field={"mappings": [{"type": "value", "options": {"0": {"text": "끊김", "color": "red"}, "1": {"text": "수집 성공", "color": "green"}}}]})
-    b.panel("stat", "앱 가동 시간", [q('time() - process_start_time_seconds{job="app", host=~"$host"}', "{{host}}")], w=6, h=5, unit="s", options=STAT)
-    b.panel("timeseries", "스모크 앱 요청(실제 앱이 오면 비어 있음)", [q('sum by(host, pattern, status) (rate(ject_smoke_http_requests_total{host=~"$host"}[5m]))', "{{host}} {{pattern}} {{status}}")], w=12, h=5, unit="reqps")
-    b.row("HTTP (Spring Boot Micrometer)")
-    b.panel("timeseries", "요청 수", [q('sum by(host) (rate(http_server_requests_seconds_count{host=~"$host"}[5m]))', "{{host}}")], unit="reqps")
-    b.panel("timeseries", "5xx 비율", [q('sum by(host) (rate(http_server_requests_seconds_count{host=~"$host", status=~"5.."}[5m])) / sum by(host) (rate(http_server_requests_seconds_count{host=~"$host"}[5m]))', "{{host}}")], unit="percentunit")
-    b.panel("timeseries", "응답 p95", [q('histogram_quantile(0.95, sum by(le, host) (rate(http_server_requests_seconds_bucket{host=~"$host", uri!~"/actuator.*|/readyz|/healthz"}[5m])))', "{{host}}")], unit="s")
-    b.panel("table", "경로별 요청·평균 응답(5분)", [q('sum by(host, method, uri, status) (rate(http_server_requests_seconds_count{host=~"$host"}[5m]))', format="table", instant=True),
-                                              q('sum by(host, method, uri, status) (rate(http_server_requests_seconds_sum{host=~"$host"}[5m])) / sum by(host, method, uri, status) (rate(http_server_requests_seconds_count{host=~"$host"}[5m]))', format="table", instant=True)],
-            w=24, h=8, options={"showHeader": True})
-    b.row("JVM")
-    b.panel("timeseries", "힙 사용", [q('sum by(host) (jvm_memory_used_bytes{host=~"$host", area="heap"})', "{{host}} used"), q('sum by(host) (jvm_memory_max_bytes{host=~"$host", area="heap"})', "{{host}} max")], unit="bytes")
-    b.panel("timeseries", "GC 정지 시간(초/초)", [q('sum by(host) (rate(jvm_gc_pause_seconds_sum{host=~"$host"}[5m]))', "{{host}}")], unit="s")
-    b.panel("timeseries", "스레드·프로세스 CPU", [q('jvm_threads_live_threads{host=~"$host"}', "{{host}} 스레드"), q('process_cpu_usage{host=~"$host"} * 100', "{{host}} CPU%")])
-    b.row("DB 커넥션 풀 (HikariCP)")
-    b.panel("timeseries", "활성·대기", [q('hikaricp_connections_active{host=~"$host"}', "{{host}} active"), q('hikaricp_connections_idle{host=~"$host"}', "{{host}} idle"), q('hikaricp_connections_pending{host=~"$host"}', "{{host}} pending")], w=12)
-    b.panel("timeseries", "획득 시간·타임아웃", [q('rate(hikaricp_connections_acquire_seconds_sum{host=~"$host"}[5m]) / rate(hikaricp_connections_acquire_seconds_count{host=~"$host"}[5m])', "{{host}} 평균 획득"), q('increase(hikaricp_connections_timeout_total{host=~"$host"}[5m])', "{{host}} 타임아웃")], w=12)
+    b.stat("앱 지표 수집", [q('last_over_time(up{job="app", host=~"$host"}[2m])', "{{host}}")], w=6,
+           field={"mappings": mapping(**{"0": ("끊김", RED), "1": ("수집 성공", GREEN)}), "color": {"mode": "thresholds"}, "thresholds": thresholds((None, RED), (1, GREEN))},
+           overrides=HOST_RENAMES)
+    b.stat("앱 가동 시간", [q('time() - process_start_time_seconds{job="app", host=~"$host"}', "{{host}}")], w=6, unit="s", decimals=0,
+           overrides=HOST_RENAMES, options=dict(STAT, colorMode="none"), desc="마지막 배포·재시작 후 경과 시간.")
+    b.panel("table", "실행 중인 앱 버전", [q('max by(host, version) (ject_smoke_info{host=~"$host"})', format="table", instant=True)],
+            w=12, h=4, options={"showHeader": True, "cellHeight": "sm"},
+            field={"custom": {"align": "left"}},
+            overrides=[{"matcher": {"id": "byName", "options": "Time"}, "properties": [{"id": "custom.hidden", "value": True}]},
+                       {"matcher": {"id": "byName", "options": "Value"}, "properties": [{"id": "custom.hidden", "value": True}]},
+                       {"matcher": {"id": "byName", "options": "host"}, "properties": [{"id": "displayName", "value": "서버"}]},
+                       {"matcher": {"id": "byName", "options": "version"}, "properties": [{"id": "displayName", "value": "커밋"}]}],
+            desc="지금은 스모크 앱의 빌드 커밋입니다. 실제 앱이 오면 비게 되며, 그때는 배포 기록(ject-deploy status)으로 확인합니다.")
+
+    b.row("웹 요청 (Nginx 접근 로그 기준)")
+    by_class = [
+        q(f'sum by(host) (count_over_time({NGINX} | json status="status", ua="ua" {NOT_PROBE} | status < 400 [$__auto]))', "{{host}} 정상(2xx·3xx)"),
+        q(f'sum by(host) (count_over_time({NGINX} | json status="status", ua="ua" {NOT_PROBE} | status >= 400, status < 500 [$__auto]))', "{{host}} 4xx"),
+        q(f'sum by(host) (count_over_time({NGINX} | json status="status", ua="ua" {NOT_PROBE} | status >= 500 [$__auto]))', "{{host}} 5xx"),
+    ]
+    b.ts("요청 수(상태별)", by_class, w=12, ds=LOKI, unit="short", field=BARS_FIELD,
+         overrides=[{"matcher": {"id": "byRegexp", "options": ".*5xx"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": RED}}]},
+                    {"matcher": {"id": "byRegexp", "options": ".*4xx"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": ORANGE}}]}],
+         desc="운영 앱 서버의 Nginx는 공개 입구라 개발 주소로 들어온 요청도 한 번 지나갑니다(개발 서버 게이트웨이에서 한 번 더 기록). "
+              "4xx에는 알 수 없는 주소로 들어온 자동 스캔을 끊은 444가 포함됩니다.")
+    b.ts("응답 시간 p95(상태 확인 경로 제외)",
+         [q(f'quantile_over_time(0.95, {NGINX} | json rt="request_time", path="path", ua="ua" {NOT_PROBE} {HEALTH_PATHS} | rt != "" | unwrap rt [$__auto]) by (host)', "{{host}}")],
+         w=12, ds=LOKI, unit="s", field=line_thresholds(POINTS_FIELD, [(None, "transparent"), (1, RED)]),
+         desc="Nginx가 응답을 끝내기까지 걸린 시간의 95번째 값. 1초 기준선을 함께 그립니다.")
+    b.ts("5xx 비율", [q(f'(sum by(host) (count_over_time({NGINX} | json status="status", ua="ua" {NOT_PROBE} | status >= 500 [$__auto])) '
+                       f'/ sum by(host) (count_over_time({NGINX} | json ua="ua" {NOT_PROBE} [$__auto])))', "{{host}}")],
+         w=12, ds=LOKI, unit="percentunit", field=line_thresholds(POINTS_FIELD, [(None, "transparent"), (0.05, RED)]), max_=1,
+         desc="요청이 없을 때는 비어 있습니다(0이 아님).")
+    b.panel("table", "많이 들어온 경로(선택한 기간)",
+            [q(f'topk(15, sum by(path, status) (count_over_time({NGINX} | json path="path", status="status", ua="ua" {NOT_PROBE} [$__range])))',
+               format="table", instant=True, queryType="instant")],
+            w=12, h=8, ds=LOKI, options={"showHeader": True, "cellHeight": "sm",
+                                         "sortBy": [{"displayName": "요청 수", "desc": True}]},
+            overrides=[{"matcher": {"id": "byName", "options": "Time"}, "properties": [{"id": "custom.hidden", "value": True}]},
+                       {"matcher": {"id": "byName", "options": "Value #A"}, "properties": [{"id": "displayName", "value": "요청 수"}]},
+                       {"matcher": {"id": "byName", "options": "path"}, "properties": [{"id": "displayName", "value": "경로"}]},
+                       {"matcher": {"id": "byName", "options": "status"}, "properties": [{"id": "displayName", "value": "상태"}]}],
+            desc="모르는 경로(/.env 등)가 많으면 자동 스캔입니다. 운영 Nginx가 막고 있는지 상태 코드로 확인합니다.")
+
+    b.row("웹 FE (개발)")
+    fe = '{job="integrations/blackbox/dev-fe"}'
+    b.stat("FE 접속 시험(개발 웹 /healthz)", [q('probe_success' + fe, "개발 웹 /healthz")], w=6, h=5, options=dict(STAT, textMode="value"),
+           field={"mappings": OKFAIL, "color": {"mode": "thresholds"}, "thresholds": thresholds((None, RED), (1, GREEN))},
+           desc="FE 컨테이너 생존 확인입니다. BE /readyz 성공과 별개이며 업무 E2E를 대신하지 않습니다.")
+    b.ts("FE 응답 시간", [q('probe_duration_seconds' + fe, "개발 웹")], w=9, h=5, unit="s", options=TS_NOLEGEND)
+    b.ts("FE 로그 줄 수", [q('sum by(host) (count_over_time({service="fe"} [$__auto]))', "{{host}}")], w=9, h=5, ds=LOKI, options=TS_NOLEGEND,
+         unit="short", field=BARS_FIELD, desc="운영 FE는 아직 배포 전이라 개발 서버만 보입니다.")
+
+    b.row("배포 시험용 앱(스모크 앱)")
+    b.ts("스모크 앱 요청", [q('sum by(host, pattern, status) (rate(ject_smoke_http_requests_total{host=~"$host"}[5m]))', "{{host}} {{pattern}} {{status}}")],
+         w=24, h=8, unit="reqps", options=dict(TS, legend={"displayMode": "table", "placement": "right", "showLegend": True, "calcs": ["lastNotNull"]}), desc="실제 BE가 배포되면 이 지표는 사라지고 아래 Spring Boot 지표로 바뀝니다.")
+
+    b.row("Spring Boot 지표 — 실제 BE 앱 배포 후 표시 (펼치기)", collapsed=True)
+    b.ts("요청 수", [q('sum by(host) (rate(http_server_requests_seconds_count{host=~"$host"}[5m]))', "{{host}}")], w=8, unit="reqps",
+         overrides=HOST_RENAMES)
+    b.ts("5xx 비율", [q('sum by(host) (rate(http_server_requests_seconds_count{host=~"$host", status=~"5.."}[5m])) / sum by(host) (rate(http_server_requests_seconds_count{host=~"$host"}[5m]))', "{{host}}")],
+         w=8, unit="percentunit", field=line_thresholds(TS_FIELD, [(None, "transparent"), (0.05, RED)]), overrides=HOST_RENAMES)
+    b.ts("응답 p95", [q('histogram_quantile(0.95, sum by(le, host) (rate(http_server_requests_seconds_bucket{host=~"$host", uri!~"/actuator.*|/readyz|/healthz"}[5m])))', "{{host}}")],
+         w=8, unit="s", field=line_thresholds(TS_FIELD, [(None, "transparent"), (1, RED)]), overrides=HOST_RENAMES)
+    b.panel("table", "경로별 요청·평균 응답(5분)",
+            [q('sum by(host, method, uri, status) (rate(http_server_requests_seconds_count{host=~"$host"}[5m]))', format="table", instant=True),
+             q('sum by(host, method, uri, status) (rate(http_server_requests_seconds_sum{host=~"$host"}[5m])) / sum by(host, method, uri, status) (rate(http_server_requests_seconds_count{host=~"$host"}[5m]))', format="table", instant=True)],
+            w=24, h=8, options={"showHeader": True, "cellHeight": "sm"},
+            overrides=[{"matcher": {"id": "byName", "options": "Time"}, "properties": [{"id": "custom.hidden", "value": True}]},
+                       {"matcher": {"id": "byName", "options": "Value #A"}, "properties": [{"id": "displayName", "value": "초당 요청"}, {"id": "unit", "value": "reqps"}]},
+                       {"matcher": {"id": "byName", "options": "Value #B"}, "properties": [{"id": "displayName", "value": "평균 응답"}, {"id": "unit", "value": "s"}]}])
+    b.ts("힙 메모리", [q('sum by(host) (jvm_memory_used_bytes{host=~"$host", area="heap"})', "{{host}} 사용"),
+                     q('sum by(host) (jvm_memory_max_bytes{host=~"$host", area="heap"})', "{{host}} 최대")], w=8, unit="bytes")
+    b.ts("GC 정지 시간(초/초)", [q('sum by(host) (rate(jvm_gc_pause_seconds_sum{host=~"$host"}[5m]))', "{{host}}")], w=8, unit="s",
+         overrides=HOST_RENAMES)
+    b.ts("스레드·프로세스 CPU", [q('jvm_threads_live_threads{host=~"$host"}', "{{host}} 스레드"),
+                              q('process_cpu_usage{host=~"$host"} * 100', "{{host}} CPU%")], w=8)
+    b.ts("DB 커넥션(활성·유휴·대기)", [q('hikaricp_connections_active{host=~"$host"}', "{{host}} 활성"),
+                                   q('hikaricp_connections_idle{host=~"$host"}', "{{host}} 유휴"),
+                                   q('hikaricp_connections_pending{host=~"$host"}', "{{host}} 대기")], w=12,
+         desc="대기가 5분 넘게 0보다 크면 경보가 울립니다(운영 PostgreSQL max_connections 60).")
+    b.ts("DB 커넥션 획득 시간·타임아웃", [q('rate(hikaricp_connections_acquire_seconds_sum{host=~"$host"}[5m]) / rate(hikaricp_connections_acquire_seconds_count{host=~"$host"}[5m])', "{{host}} 평균 획득"),
+                                      q('increase(hikaricp_connections_timeout_total{host=~"$host"}[5m])', "{{host}} 타임아웃")], w=12)
     return b
 
 
 def logs():
-    b = Board("ject-logs", "JECT 로그", ["ject"])
+    b = Board("ject-logs", "JECT 로그", ["ject"], links=board_links())
+    b.var("env", 'label_values(env)', ds=LOKI, label="환경")
     b.var("host", 'label_values(host)', ds=LOKI, label="서버")
     b.var("service", 'label_values(service)', ds=LOKI, label="서비스")
-    b.panel("timeseries", "수준별 로그 수(5분)", [q('sum by(level) (count_over_time({host=~"$host", service=~"$service"}[5m]))', "{{level}}")], w=12, h=7, ds=LOKI)
-    b.panel("timeseries", "Nginx 5xx(5분)", [q('sum by(host) (count_over_time({service="nginx", host=~"$host"} | json | status >= 500 [5m]))', "{{host}}")], w=12, h=7, ds=LOKI)
-    b.panel("logs", "로그(민감정보는 수집 단계에서 가림)", [q('{host=~"$host", service=~"$service"}')], w=24, h=16, ds=LOKI,
-            options={"showTime": True, "wrapLogMessage": True, "sortOrder": "Descending", "enableLogDetails": True})
-    b.panel("logs", "JECT 작업(백업·복원 시험·인증서·알림 중계)", [q('{job="systemd"}')], w=24, h=10, ds=LOKI,
-            options={"showTime": True, "wrapLogMessage": True, "sortOrder": "Descending"})
+    sel = '{env=~"$env", host=~"$host", service=~"$service"}'
+    b.ts("서비스별 로그 줄 수", [q(f'sum by(service) (count_over_time({sel} [$__auto]))', "{{service}}")], w=12, h=7, ds=LOKI,
+         unit="short", field=BARS_FIELD, options=TS_SUM_RIGHT)
+    err_sel = '{env=~"$env", host=~"$host", service=~"$service", service!~"tempo|loki|grafana|prometheus"}'
+    b.ts("오류로 보이는 로그(단어 기준, 관측 도구 제외)",
+         [q(f'sum by(service) (count_over_time({err_sel} |~ "(?i)(error|exception|fatal|panic)" [$__auto]))', "{{service}}")],
+         w=12, h=7, ds=LOKI, unit="short", field=BARS_FIELD, options=TS_SUM_RIGHT,
+         desc="error·exception·fatal·panic 단어가 들어간 줄. 관측 도구(Tempo 등)는 평상시에도 이런 단어를 남겨 뺐습니다(로그 본문에서는 보임). 앱이 JSON 로그 수준(level)을 남기면 아래 '로그 수준별'이 더 정확합니다.")
+    b.ts("Nginx 상태 코드별 요청",
+         [q('sum by(code) (count_over_time({service="nginx", env=~"$env", host=~"$host"} | json code="status" | __error__="" [$__auto]))', "{{code}}")],
+         w=12, h=7, ds=LOKI, unit="short", field=BARS_FIELD, options=TS_SUM_RIGHT,
+         overrides=[{"matcher": {"id": "byRegexp", "options": "5.."}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": RED}}]}],
+         desc="접속 시험(1분마다)도 포함합니다. 444는 알 수 없는 주소로 들어온 요청을 끊은 것입니다.")
+    b.ts("로그 수준별(앱 JSON 로그만 · 실제 BE 배포 후 표시)", [q(f'sum by(level) (count_over_time({{env=~"$env", host=~"$host", service=~"$service", level=~".+"}} [$__auto]))', "{{level}}")],
+         w=12, h=7, ds=LOKI, unit="short", field=BARS_FIELD, options=TS_SUM_RIGHT,
+         desc="Spring Boot(ECS) 로그의 level 값으로 나눕니다. 실제 BE 앱 배포 전에는 비어 있습니다. 「운영 오류 로그 급증」 경보도 이 값을 씁니다.")
+    b.panel("logs", "로그 본문", [q(sel)], w=24, h=16, ds=LOKI,
+            desc="Loki 7일 보관. 비밀번호·토큰·이메일·전화번호 등 주요 패턴은 수집 단계에서 가립니다(모양이 정해지지 않은 값은 못 가림).",
+            options={"showTime": True, "wrapLogMessage": True, "sortOrder": "Descending", "enableLogDetails": True,
+                     "prettifyLogMessage": False, "dedupStrategy": "none"})
+    b.panel("logs", "JECT 작업(백업·복원 시험·인증서 갱신·알림 중계)", [q('{job="systemd", host=~"$host"}')], w=24, h=10, ds=LOKI,
+            options={"showTime": True, "wrapLogMessage": True, "sortOrder": "Descending", "enableLogDetails": True},
+            desc="서비스 라벨이 없는 systemd 작업 로그라 '서비스' 선택과 관계없이 보입니다. 백업은 운영 DB 서버, 인증서 갱신은 운영 앱 서버에서 돕니다.")
     return b
 
 

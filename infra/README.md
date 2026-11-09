@@ -72,8 +72,11 @@ sshd는 키 로그인만, `AllowGroups ject-admins deploy`, `MaxAuthTries 3`.
 - **Grafana 접속(관리자):** `ssh -N -L 3000:127.0.0.1:3000 seongju@ject-dev`(Tailscale) → 브라우저 `http://127.0.0.1:3000`(창을 닫으면 터널 종료).
   Tailscale이 안 될 때만 `JECT_SSH_ARGS="-N -L 3000:127.0.0.1:3000" OCI_PROFILE=JECT bash access/ject-ssh.sh seongju dev`(Bastion).
   관리자 비밀번호: 개발 VM `sudo cat /srv/ject/secrets/grafana_admin_password`(사용자 `admin`). 팀원 계정은 사람마다 따로 만든다.
-- 대시보드: 「JECT 개요」(서버·백업·공인 주소·인증서·관측 도구), 「JECT 앱」(HTTP·JVM·Hikari), 「JECT 로그」.
-  규칙·대시보드는 `observability/grafana/generate.py`로 생성하고, 해당 파일만 백업·교체한 뒤 Grafana를 재시작한다. 기존 서버에 `install-role.sh`를 다시 실행하면 선택 수신처·대시보드·Alloy 설정이 지워질 수 있으므로 관측 변경에 사용하지 않는다.
+- 대시보드(상단 링크로 서로 이동, 추적 검색은 개발 Tempo):
+  - 「JECT 개요」: 한눈에 보기(서버 수집·공인 주소·인증서·백업·복원 시험·울리는 경보), 서버 자원, 백업·복원, 공인 주소 시험, Redis, 관측 도구(접힘).
+  - 「JECT 앱」: 앱 상태·버전, Nginx 접근 로그 기준 요청·4xx/5xx·p95·많이 들어온 경로, 개발 FE, 스모크 앱. Spring Boot(HTTP·JVM·Hikari) 행은 실제 BE 배포 전까지 비어 있어 접어 둔다.
+  - 「JECT 로그」: 서비스별 줄 수, 오류로 보이는 로그(관측 도구 제외), Nginx 상태 코드, 로그 수준(앱 JSON 로그), 로그 본문, systemd 작업.
+  규칙·대시보드는 `observability/grafana/generate.py`로 생성하고, 해당 파일만 백업·교체한 뒤 Grafana를 재시작한다(대시보드만 바꿀 때는 `POST /api/admin/provisioning/dashboards/reload`로 충분). 기존 서버에 `install-role.sh`를 다시 실행하면 선택 수신처·대시보드·Alloy 설정이 지워질 수 있으므로 관측 변경에 사용하지 않는다.
 - 기본 알림 규칙 19개: 서버 지표 끊김·디스크 80/90%·메모리 15%·CPU 85%, 백업 실패·26시간 성공 없음·복원 시험 실패, 공인 주소 실패·인증서 14일,
   앱 지표 끊김·5xx 5%·p95 1초·DB 커넥션 대기·운영 오류 로그, 관측도구 누락·지표 전송 실패·로그 폐기·복원 시험 오래됨. OCI 알람: VM 응답 없음(5분)·메모리 90%(10분).
 - 설치 순서(개발 VM): `setup-secrets.sh obs` → `PROBE_PROD_URL=… PROBE_DEV_URL=… setup-secrets.sh obs-env dev dev <개발 IP>` →
