@@ -89,7 +89,7 @@
    },
    "options": {
     "mode": "markdown",
-    "content": "- **웹 요청(Nginx 로그 기준)** 행은 지금도 실제 요청으로 채워집니다. 접속 시험(Blackbox)은 요청 수에서 뺐습니다.\n- 개발·운영 BE는 아직 **배포 시험용 앱(스모크 앱)** 입니다. 실제 BE(Spring Boot)가 관리 포트 8081의 `/actuator/prometheus`를 열고 배포되면 맨 아래 **Spring Boot 지표** 행(접혀 있음)이 채워집니다. 그 전까지 비어 있는 것이 정상입니다.\n- 같은 시기 「앱 지표 끊김」 외 HTTP·DB 경보는 지표가 없어 '수집 없음'으로 보입니다."
+    "content": "- **웹 요청(Nginx 로그 기준)** 행은 지금도 실제 요청으로 채워집니다. 접속 시험(Blackbox)은 요청 수에서 뺐습니다.\n- 개발 BE는 실제 앱(Spring Boot)이 develop 병합 때마다 자동 배포되며, 맨 아래 **Spring Boot 지표** 행에 보입니다.\n- 운영 BE는 첫 운영 배포 전까지 **배포 시험용 앱(스모크 앱)** 입니다. 그동안 운영의 Spring Boot 지표는 비어 있는 것이 정상입니다."
    }
   },
   {
@@ -396,7 +396,7 @@
     "showHeader": true,
     "cellHeight": "sm"
    },
-   "description": "지금은 스모크 앱의 빌드 커밋입니다. 실제 앱이 오면 비게 되며, 그때는 배포 기록(ject-deploy status)으로 확인합니다."
+   "description": "스모크 앱의 빌드 커밋만 보입니다. 실제 BE의 버전은 배포 기록(ject-deploy status)으로 확인합니다."
   },
   {
    "type": "row",
@@ -957,7 +957,7 @@
   },
   {
    "type": "row",
-   "title": "배포 시험용 앱(스모크 앱)",
+   "title": "배포 시험용 앱(스모크 앱, 운영)",
    "id": 15,
    "collapsed": false,
    "gridPos": {
@@ -1022,782 +1022,782 @@
      "sort": "desc"
     }
    },
-   "description": "실제 BE가 배포되면 이 지표는 사라지고 아래 Spring Boot 지표로 바뀝니다."
+   "description": "운영에 실제 BE가 배포되면 이 지표는 사라지고 아래 Spring Boot 지표로 바뀝니다."
   },
   {
    "type": "row",
-   "title": "Spring Boot 지표 — 실제 BE 앱 배포 후 표시 (펼치기)",
+   "title": "Spring Boot 지표",
    "id": 17,
-   "collapsed": true,
+   "collapsed": false,
    "gridPos": {
     "x": 0,
     "y": 41,
     "w": 24,
     "h": 1
    },
-   "panels": [
+   "panels": []
+  },
+  {
+   "type": "timeseries",
+   "title": "요청 수",
+   "id": 18,
+   "gridPos": {
+    "x": 0,
+    "y": 42,
+    "w": 8,
+    "h": 8
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prom"
+   },
+   "targets": [
     {
-     "type": "timeseries",
-     "title": "요청 수",
-     "id": 18,
-     "gridPos": {
-      "x": 0,
-      "y": 42,
-      "w": 8,
-      "h": 8
-     },
+     "refId": "A",
      "datasource": {
       "type": "prometheus",
       "uid": "prom"
      },
-     "targets": [
-      {
-       "refId": "A",
-       "datasource": {
-        "type": "prometheus",
-        "uid": "prom"
-       },
-       "expr": "sum by(host) (rate(http_server_requests_seconds_count{host=~\"$host\"}[5m]))",
-       "legendFormat": "{{host}}"
-      }
-     ],
-     "fieldConfig": {
-      "defaults": {
-       "custom": {
-        "drawStyle": "line",
-        "lineWidth": 2,
-        "fillOpacity": 8,
-        "gradientMode": "opacity",
-        "showPoints": "never",
-        "spanNulls": false,
-        "axisSoftMin": 0
-       },
-       "unit": "reqps"
-      },
-      "overrides": [
-       {
-        "matcher": {
-         "id": "byName",
-         "options": "prod-app"
-        },
-        "properties": [
-         {
-          "id": "displayName",
-          "value": "운영 앱 서버"
-         }
-        ]
-       },
-       {
-        "matcher": {
-         "id": "byName",
-         "options": "prod-data"
-        },
-        "properties": [
-         {
-          "id": "displayName",
-          "value": "운영 DB 서버"
-         }
-        ]
-       },
-       {
-        "matcher": {
-         "id": "byName",
-         "options": "dev"
-        },
-        "properties": [
-         {
-          "id": "displayName",
-          "value": "개발·모니터링 서버"
-         }
-        ]
-       }
-      ]
-     },
-     "options": {
-      "legend": {
-       "displayMode": "table",
-       "placement": "bottom",
-       "showLegend": true,
-       "calcs": [
-        "lastNotNull",
-        "max"
-       ]
-      },
-      "tooltip": {
-       "mode": "multi",
-       "sort": "desc"
-      }
-     }
-    },
-    {
-     "type": "timeseries",
-     "title": "5xx 비율",
-     "id": 19,
-     "gridPos": {
-      "x": 8,
-      "y": 42,
-      "w": 8,
-      "h": 8
-     },
-     "datasource": {
-      "type": "prometheus",
-      "uid": "prom"
-     },
-     "targets": [
-      {
-       "refId": "A",
-       "datasource": {
-        "type": "prometheus",
-        "uid": "prom"
-       },
-       "expr": "sum by(host) (rate(http_server_requests_seconds_count{host=~\"$host\", status=~\"5..\"}[5m])) / sum by(host) (rate(http_server_requests_seconds_count{host=~\"$host\"}[5m]))",
-       "legendFormat": "{{host}}"
-      }
-     ],
-     "fieldConfig": {
-      "defaults": {
-       "custom": {
-        "drawStyle": "line",
-        "lineWidth": 2,
-        "fillOpacity": 8,
-        "gradientMode": "opacity",
-        "showPoints": "never",
-        "spanNulls": false,
-        "axisSoftMin": 0,
-        "thresholdsStyle": {
-         "mode": "dashed"
-        }
-       },
-       "thresholds": {
-        "mode": "absolute",
-        "steps": [
-         {
-          "color": "transparent",
-          "value": null
-         },
-         {
-          "color": "red",
-          "value": 0.05
-         }
-        ]
-       },
-       "unit": "percentunit"
-      },
-      "overrides": [
-       {
-        "matcher": {
-         "id": "byName",
-         "options": "prod-app"
-        },
-        "properties": [
-         {
-          "id": "displayName",
-          "value": "운영 앱 서버"
-         }
-        ]
-       },
-       {
-        "matcher": {
-         "id": "byName",
-         "options": "prod-data"
-        },
-        "properties": [
-         {
-          "id": "displayName",
-          "value": "운영 DB 서버"
-         }
-        ]
-       },
-       {
-        "matcher": {
-         "id": "byName",
-         "options": "dev"
-        },
-        "properties": [
-         {
-          "id": "displayName",
-          "value": "개발·모니터링 서버"
-         }
-        ]
-       }
-      ]
-     },
-     "options": {
-      "legend": {
-       "displayMode": "table",
-       "placement": "bottom",
-       "showLegend": true,
-       "calcs": [
-        "lastNotNull",
-        "max"
-       ]
-      },
-      "tooltip": {
-       "mode": "multi",
-       "sort": "desc"
-      }
-     }
-    },
-    {
-     "type": "timeseries",
-     "title": "응답 p95",
-     "id": 20,
-     "gridPos": {
-      "x": 16,
-      "y": 42,
-      "w": 8,
-      "h": 8
-     },
-     "datasource": {
-      "type": "prometheus",
-      "uid": "prom"
-     },
-     "targets": [
-      {
-       "refId": "A",
-       "datasource": {
-        "type": "prometheus",
-        "uid": "prom"
-       },
-       "expr": "histogram_quantile(0.95, sum by(le, host) (rate(http_server_requests_seconds_bucket{host=~\"$host\", uri!~\"/actuator.*|/readyz|/healthz\"}[5m])))",
-       "legendFormat": "{{host}}"
-      }
-     ],
-     "fieldConfig": {
-      "defaults": {
-       "custom": {
-        "drawStyle": "line",
-        "lineWidth": 2,
-        "fillOpacity": 8,
-        "gradientMode": "opacity",
-        "showPoints": "never",
-        "spanNulls": false,
-        "axisSoftMin": 0,
-        "thresholdsStyle": {
-         "mode": "dashed"
-        }
-       },
-       "thresholds": {
-        "mode": "absolute",
-        "steps": [
-         {
-          "color": "transparent",
-          "value": null
-         },
-         {
-          "color": "red",
-          "value": 1
-         }
-        ]
-       },
-       "unit": "s"
-      },
-      "overrides": [
-       {
-        "matcher": {
-         "id": "byName",
-         "options": "prod-app"
-        },
-        "properties": [
-         {
-          "id": "displayName",
-          "value": "운영 앱 서버"
-         }
-        ]
-       },
-       {
-        "matcher": {
-         "id": "byName",
-         "options": "prod-data"
-        },
-        "properties": [
-         {
-          "id": "displayName",
-          "value": "운영 DB 서버"
-         }
-        ]
-       },
-       {
-        "matcher": {
-         "id": "byName",
-         "options": "dev"
-        },
-        "properties": [
-         {
-          "id": "displayName",
-          "value": "개발·모니터링 서버"
-         }
-        ]
-       }
-      ]
-     },
-     "options": {
-      "legend": {
-       "displayMode": "table",
-       "placement": "bottom",
-       "showLegend": true,
-       "calcs": [
-        "lastNotNull",
-        "max"
-       ]
-      },
-      "tooltip": {
-       "mode": "multi",
-       "sort": "desc"
-      }
-     }
-    },
-    {
-     "type": "table",
-     "title": "경로별 요청·평균 응답(5분)",
-     "id": 21,
-     "gridPos": {
-      "x": 0,
-      "y": 50,
-      "w": 24,
-      "h": 8
-     },
-     "datasource": {
-      "type": "prometheus",
-      "uid": "prom"
-     },
-     "targets": [
-      {
-       "refId": "A",
-       "datasource": {
-        "type": "prometheus",
-        "uid": "prom"
-       },
-       "expr": "sum by(host, method, uri, status) (rate(http_server_requests_seconds_count{host=~\"$host\"}[5m]))",
-       "format": "table",
-       "instant": true
-      },
-      {
-       "refId": "B",
-       "datasource": {
-        "type": "prometheus",
-        "uid": "prom"
-       },
-       "expr": "sum by(host, method, uri, status) (rate(http_server_requests_seconds_sum{host=~\"$host\"}[5m])) / sum by(host, method, uri, status) (rate(http_server_requests_seconds_count{host=~\"$host\"}[5m]))",
-       "format": "table",
-       "instant": true
-      }
-     ],
-     "fieldConfig": {
-      "defaults": {},
-      "overrides": [
-       {
-        "matcher": {
-         "id": "byName",
-         "options": "Time"
-        },
-        "properties": [
-         {
-          "id": "custom.hidden",
-          "value": true
-         }
-        ]
-       },
-       {
-        "matcher": {
-         "id": "byName",
-         "options": "Value #A"
-        },
-        "properties": [
-         {
-          "id": "displayName",
-          "value": "초당 요청"
-         },
-         {
-          "id": "unit",
-          "value": "reqps"
-         }
-        ]
-       },
-       {
-        "matcher": {
-         "id": "byName",
-         "options": "Value #B"
-        },
-        "properties": [
-         {
-          "id": "displayName",
-          "value": "평균 응답"
-         },
-         {
-          "id": "unit",
-          "value": "s"
-         }
-        ]
-       }
-      ]
-     },
-     "options": {
-      "showHeader": true,
-      "cellHeight": "sm"
-     }
-    },
-    {
-     "type": "timeseries",
-     "title": "힙 메모리",
-     "id": 22,
-     "gridPos": {
-      "x": 0,
-      "y": 58,
-      "w": 8,
-      "h": 8
-     },
-     "datasource": {
-      "type": "prometheus",
-      "uid": "prom"
-     },
-     "targets": [
-      {
-       "refId": "A",
-       "datasource": {
-        "type": "prometheus",
-        "uid": "prom"
-       },
-       "expr": "sum by(host) (jvm_memory_used_bytes{host=~\"$host\", area=\"heap\"})",
-       "legendFormat": "{{host}} 사용"
-      },
-      {
-       "refId": "B",
-       "datasource": {
-        "type": "prometheus",
-        "uid": "prom"
-       },
-       "expr": "sum by(host) (jvm_memory_max_bytes{host=~\"$host\", area=\"heap\"})",
-       "legendFormat": "{{host}} 최대"
-      }
-     ],
-     "fieldConfig": {
-      "defaults": {
-       "custom": {
-        "drawStyle": "line",
-        "lineWidth": 2,
-        "fillOpacity": 8,
-        "gradientMode": "opacity",
-        "showPoints": "never",
-        "spanNulls": false,
-        "axisSoftMin": 0
-       },
-       "unit": "bytes"
-      },
-      "overrides": []
-     },
-     "options": {
-      "legend": {
-       "displayMode": "table",
-       "placement": "bottom",
-       "showLegend": true,
-       "calcs": [
-        "lastNotNull",
-        "max"
-       ]
-      },
-      "tooltip": {
-       "mode": "multi",
-       "sort": "desc"
-      }
-     }
-    },
-    {
-     "type": "timeseries",
-     "title": "GC 정지 시간(초/초)",
-     "id": 23,
-     "gridPos": {
-      "x": 8,
-      "y": 58,
-      "w": 8,
-      "h": 8
-     },
-     "datasource": {
-      "type": "prometheus",
-      "uid": "prom"
-     },
-     "targets": [
-      {
-       "refId": "A",
-       "datasource": {
-        "type": "prometheus",
-        "uid": "prom"
-       },
-       "expr": "sum by(host) (rate(jvm_gc_pause_seconds_sum{host=~\"$host\"}[5m]))",
-       "legendFormat": "{{host}}"
-      }
-     ],
-     "fieldConfig": {
-      "defaults": {
-       "custom": {
-        "drawStyle": "line",
-        "lineWidth": 2,
-        "fillOpacity": 8,
-        "gradientMode": "opacity",
-        "showPoints": "never",
-        "spanNulls": false,
-        "axisSoftMin": 0
-       },
-       "unit": "s"
-      },
-      "overrides": [
-       {
-        "matcher": {
-         "id": "byName",
-         "options": "prod-app"
-        },
-        "properties": [
-         {
-          "id": "displayName",
-          "value": "운영 앱 서버"
-         }
-        ]
-       },
-       {
-        "matcher": {
-         "id": "byName",
-         "options": "prod-data"
-        },
-        "properties": [
-         {
-          "id": "displayName",
-          "value": "운영 DB 서버"
-         }
-        ]
-       },
-       {
-        "matcher": {
-         "id": "byName",
-         "options": "dev"
-        },
-        "properties": [
-         {
-          "id": "displayName",
-          "value": "개발·모니터링 서버"
-         }
-        ]
-       }
-      ]
-     },
-     "options": {
-      "legend": {
-       "displayMode": "table",
-       "placement": "bottom",
-       "showLegend": true,
-       "calcs": [
-        "lastNotNull",
-        "max"
-       ]
-      },
-      "tooltip": {
-       "mode": "multi",
-       "sort": "desc"
-      }
-     }
-    },
-    {
-     "type": "timeseries",
-     "title": "스레드·프로세스 CPU",
-     "id": 24,
-     "gridPos": {
-      "x": 16,
-      "y": 58,
-      "w": 8,
-      "h": 8
-     },
-     "datasource": {
-      "type": "prometheus",
-      "uid": "prom"
-     },
-     "targets": [
-      {
-       "refId": "A",
-       "datasource": {
-        "type": "prometheus",
-        "uid": "prom"
-       },
-       "expr": "jvm_threads_live_threads{host=~\"$host\"}",
-       "legendFormat": "{{host}} 스레드"
-      },
-      {
-       "refId": "B",
-       "datasource": {
-        "type": "prometheus",
-        "uid": "prom"
-       },
-       "expr": "process_cpu_usage{host=~\"$host\"} * 100",
-       "legendFormat": "{{host}} CPU%"
-      }
-     ],
-     "fieldConfig": {
-      "defaults": {
-       "custom": {
-        "drawStyle": "line",
-        "lineWidth": 2,
-        "fillOpacity": 8,
-        "gradientMode": "opacity",
-        "showPoints": "never",
-        "spanNulls": false,
-        "axisSoftMin": 0
-       }
-      },
-      "overrides": []
-     },
-     "options": {
-      "legend": {
-       "displayMode": "table",
-       "placement": "bottom",
-       "showLegend": true,
-       "calcs": [
-        "lastNotNull",
-        "max"
-       ]
-      },
-      "tooltip": {
-       "mode": "multi",
-       "sort": "desc"
-      }
-     }
-    },
-    {
-     "type": "timeseries",
-     "title": "DB 커넥션(활성·유휴·대기)",
-     "id": 25,
-     "gridPos": {
-      "x": 0,
-      "y": 66,
-      "w": 12,
-      "h": 8
-     },
-     "datasource": {
-      "type": "prometheus",
-      "uid": "prom"
-     },
-     "targets": [
-      {
-       "refId": "A",
-       "datasource": {
-        "type": "prometheus",
-        "uid": "prom"
-       },
-       "expr": "hikaricp_connections_active{host=~\"$host\"}",
-       "legendFormat": "{{host}} 활성"
-      },
-      {
-       "refId": "B",
-       "datasource": {
-        "type": "prometheus",
-        "uid": "prom"
-       },
-       "expr": "hikaricp_connections_idle{host=~\"$host\"}",
-       "legendFormat": "{{host}} 유휴"
-      },
-      {
-       "refId": "C",
-       "datasource": {
-        "type": "prometheus",
-        "uid": "prom"
-       },
-       "expr": "hikaricp_connections_pending{host=~\"$host\"}",
-       "legendFormat": "{{host}} 대기"
-      }
-     ],
-     "fieldConfig": {
-      "defaults": {
-       "custom": {
-        "drawStyle": "line",
-        "lineWidth": 2,
-        "fillOpacity": 8,
-        "gradientMode": "opacity",
-        "showPoints": "never",
-        "spanNulls": false,
-        "axisSoftMin": 0
-       }
-      },
-      "overrides": []
-     },
-     "options": {
-      "legend": {
-       "displayMode": "table",
-       "placement": "bottom",
-       "showLegend": true,
-       "calcs": [
-        "lastNotNull",
-        "max"
-       ]
-      },
-      "tooltip": {
-       "mode": "multi",
-       "sort": "desc"
-      }
-     },
-     "description": "대기가 5분 넘게 0보다 크면 경보가 울립니다(운영 PostgreSQL max_connections 60)."
-    },
-    {
-     "type": "timeseries",
-     "title": "DB 커넥션 획득 시간·타임아웃",
-     "id": 26,
-     "gridPos": {
-      "x": 12,
-      "y": 66,
-      "w": 12,
-      "h": 8
-     },
-     "datasource": {
-      "type": "prometheus",
-      "uid": "prom"
-     },
-     "targets": [
-      {
-       "refId": "A",
-       "datasource": {
-        "type": "prometheus",
-        "uid": "prom"
-       },
-       "expr": "rate(hikaricp_connections_acquire_seconds_sum{host=~\"$host\"}[5m]) / rate(hikaricp_connections_acquire_seconds_count{host=~\"$host\"}[5m])",
-       "legendFormat": "{{host}} 평균 획득"
-      },
-      {
-       "refId": "B",
-       "datasource": {
-        "type": "prometheus",
-        "uid": "prom"
-       },
-       "expr": "increase(hikaricp_connections_timeout_total{host=~\"$host\"}[5m])",
-       "legendFormat": "{{host}} 타임아웃"
-      }
-     ],
-     "fieldConfig": {
-      "defaults": {
-       "custom": {
-        "drawStyle": "line",
-        "lineWidth": 2,
-        "fillOpacity": 8,
-        "gradientMode": "opacity",
-        "showPoints": "never",
-        "spanNulls": false,
-        "axisSoftMin": 0
-       }
-      },
-      "overrides": []
-     },
-     "options": {
-      "legend": {
-       "displayMode": "table",
-       "placement": "bottom",
-       "showLegend": true,
-       "calcs": [
-        "lastNotNull",
-        "max"
-       ]
-      },
-      "tooltip": {
-       "mode": "multi",
-       "sort": "desc"
-      }
-     }
+     "expr": "sum by(host) (rate(http_server_requests_seconds_count{host=~\"$host\"}[5m]))",
+     "legendFormat": "{{host}}"
     }
-   ]
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "custom": {
+      "drawStyle": "line",
+      "lineWidth": 2,
+      "fillOpacity": 8,
+      "gradientMode": "opacity",
+      "showPoints": "never",
+      "spanNulls": false,
+      "axisSoftMin": 0
+     },
+     "unit": "reqps"
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "prod-app"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "운영 앱 서버"
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "prod-data"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "운영 DB 서버"
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "dev"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "개발·모니터링 서버"
+       }
+      ]
+     }
+    ]
+   },
+   "options": {
+    "legend": {
+     "displayMode": "table",
+     "placement": "bottom",
+     "showLegend": true,
+     "calcs": [
+      "lastNotNull",
+      "max"
+     ]
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   }
+  },
+  {
+   "type": "timeseries",
+   "title": "5xx 비율",
+   "id": 19,
+   "gridPos": {
+    "x": 8,
+    "y": 42,
+    "w": 8,
+    "h": 8
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prom"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "sum by(host) (rate(http_server_requests_seconds_count{host=~\"$host\", status=~\"5..\"}[5m])) / sum by(host) (rate(http_server_requests_seconds_count{host=~\"$host\"}[5m]))",
+     "legendFormat": "{{host}}"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "custom": {
+      "drawStyle": "line",
+      "lineWidth": 2,
+      "fillOpacity": 8,
+      "gradientMode": "opacity",
+      "showPoints": "never",
+      "spanNulls": false,
+      "axisSoftMin": 0,
+      "thresholdsStyle": {
+       "mode": "dashed"
+      }
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "transparent",
+        "value": null
+       },
+       {
+        "color": "red",
+        "value": 0.05
+       }
+      ]
+     },
+     "unit": "percentunit"
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "prod-app"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "운영 앱 서버"
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "prod-data"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "운영 DB 서버"
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "dev"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "개발·모니터링 서버"
+       }
+      ]
+     }
+    ]
+   },
+   "options": {
+    "legend": {
+     "displayMode": "table",
+     "placement": "bottom",
+     "showLegend": true,
+     "calcs": [
+      "lastNotNull",
+      "max"
+     ]
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   }
+  },
+  {
+   "type": "timeseries",
+   "title": "응답 p95",
+   "id": 20,
+   "gridPos": {
+    "x": 16,
+    "y": 42,
+    "w": 8,
+    "h": 8
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prom"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "histogram_quantile(0.95, sum by(le, host) (rate(http_server_requests_seconds_bucket{host=~\"$host\", uri!~\"/actuator.*|/readyz|/healthz\"}[5m])))",
+     "legendFormat": "{{host}}"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "custom": {
+      "drawStyle": "line",
+      "lineWidth": 2,
+      "fillOpacity": 8,
+      "gradientMode": "opacity",
+      "showPoints": "never",
+      "spanNulls": false,
+      "axisSoftMin": 0,
+      "thresholdsStyle": {
+       "mode": "dashed"
+      }
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "transparent",
+        "value": null
+       },
+       {
+        "color": "red",
+        "value": 1
+       }
+      ]
+     },
+     "unit": "s"
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "prod-app"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "운영 앱 서버"
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "prod-data"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "운영 DB 서버"
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "dev"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "개발·모니터링 서버"
+       }
+      ]
+     }
+    ]
+   },
+   "options": {
+    "legend": {
+     "displayMode": "table",
+     "placement": "bottom",
+     "showLegend": true,
+     "calcs": [
+      "lastNotNull",
+      "max"
+     ]
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "description": "앱이 응답 시간 구간별 지표(http.server.requests 히스토그램)를 내보내야 그려집니다. 지금 BE 설정에는 없어 비어 있습니다."
+  },
+  {
+   "type": "table",
+   "title": "경로별 요청·평균 응답(5분)",
+   "id": 21,
+   "gridPos": {
+    "x": 0,
+    "y": 50,
+    "w": 24,
+    "h": 8
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prom"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "sum by(host, method, uri, status) (rate(http_server_requests_seconds_count{host=~\"$host\"}[5m]))",
+     "format": "table",
+     "instant": true
+    },
+    {
+     "refId": "B",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "sum by(host, method, uri, status) (rate(http_server_requests_seconds_sum{host=~\"$host\"}[5m])) / sum by(host, method, uri, status) (rate(http_server_requests_seconds_count{host=~\"$host\"}[5m]))",
+     "format": "table",
+     "instant": true
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {},
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "Time"
+      },
+      "properties": [
+       {
+        "id": "custom.hidden",
+        "value": true
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "Value #A"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "초당 요청"
+       },
+       {
+        "id": "unit",
+        "value": "reqps"
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "Value #B"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "평균 응답"
+       },
+       {
+        "id": "unit",
+        "value": "s"
+       }
+      ]
+     }
+    ]
+   },
+   "options": {
+    "showHeader": true,
+    "cellHeight": "sm"
+   }
+  },
+  {
+   "type": "timeseries",
+   "title": "힙 메모리",
+   "id": 22,
+   "gridPos": {
+    "x": 0,
+    "y": 58,
+    "w": 8,
+    "h": 8
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prom"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "sum by(host) (jvm_memory_used_bytes{host=~\"$host\", area=\"heap\"})",
+     "legendFormat": "{{host}} 사용"
+    },
+    {
+     "refId": "B",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "sum by(host) (jvm_memory_max_bytes{host=~\"$host\", area=\"heap\"})",
+     "legendFormat": "{{host}} 최대"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "custom": {
+      "drawStyle": "line",
+      "lineWidth": 2,
+      "fillOpacity": 8,
+      "gradientMode": "opacity",
+      "showPoints": "never",
+      "spanNulls": false,
+      "axisSoftMin": 0
+     },
+     "unit": "bytes"
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "table",
+     "placement": "bottom",
+     "showLegend": true,
+     "calcs": [
+      "lastNotNull",
+      "max"
+     ]
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   }
+  },
+  {
+   "type": "timeseries",
+   "title": "GC 정지 시간(초/초)",
+   "id": 23,
+   "gridPos": {
+    "x": 8,
+    "y": 58,
+    "w": 8,
+    "h": 8
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prom"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "sum by(host) (rate(jvm_gc_pause_seconds_sum{host=~\"$host\"}[5m]))",
+     "legendFormat": "{{host}}"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "custom": {
+      "drawStyle": "line",
+      "lineWidth": 2,
+      "fillOpacity": 8,
+      "gradientMode": "opacity",
+      "showPoints": "never",
+      "spanNulls": false,
+      "axisSoftMin": 0
+     },
+     "unit": "s"
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "prod-app"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "운영 앱 서버"
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "prod-data"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "운영 DB 서버"
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "dev"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "개발·모니터링 서버"
+       }
+      ]
+     }
+    ]
+   },
+   "options": {
+    "legend": {
+     "displayMode": "table",
+     "placement": "bottom",
+     "showLegend": true,
+     "calcs": [
+      "lastNotNull",
+      "max"
+     ]
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   }
+  },
+  {
+   "type": "timeseries",
+   "title": "스레드·프로세스 CPU",
+   "id": 24,
+   "gridPos": {
+    "x": 16,
+    "y": 58,
+    "w": 8,
+    "h": 8
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prom"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "jvm_threads_live_threads{host=~\"$host\"}",
+     "legendFormat": "{{host}} 스레드"
+    },
+    {
+     "refId": "B",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "process_cpu_usage{host=~\"$host\"} * 100",
+     "legendFormat": "{{host}} CPU%"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "custom": {
+      "drawStyle": "line",
+      "lineWidth": 2,
+      "fillOpacity": 8,
+      "gradientMode": "opacity",
+      "showPoints": "never",
+      "spanNulls": false,
+      "axisSoftMin": 0
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "table",
+     "placement": "bottom",
+     "showLegend": true,
+     "calcs": [
+      "lastNotNull",
+      "max"
+     ]
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   }
+  },
+  {
+   "type": "timeseries",
+   "title": "DB 커넥션(활성·유휴·대기)",
+   "id": 25,
+   "gridPos": {
+    "x": 0,
+    "y": 66,
+    "w": 12,
+    "h": 8
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prom"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "hikaricp_connections_active{host=~\"$host\"}",
+     "legendFormat": "{{host}} 활성"
+    },
+    {
+     "refId": "B",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "hikaricp_connections_idle{host=~\"$host\"}",
+     "legendFormat": "{{host}} 유휴"
+    },
+    {
+     "refId": "C",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "hikaricp_connections_pending{host=~\"$host\"}",
+     "legendFormat": "{{host}} 대기"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "custom": {
+      "drawStyle": "line",
+      "lineWidth": 2,
+      "fillOpacity": 8,
+      "gradientMode": "opacity",
+      "showPoints": "never",
+      "spanNulls": false,
+      "axisSoftMin": 0
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "table",
+     "placement": "bottom",
+     "showLegend": true,
+     "calcs": [
+      "lastNotNull",
+      "max"
+     ]
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "description": "대기가 5분 넘게 0보다 크면 경보가 울립니다(운영 PostgreSQL max_connections 60)."
+  },
+  {
+   "type": "timeseries",
+   "title": "DB 커넥션 획득 시간·타임아웃",
+   "id": 26,
+   "gridPos": {
+    "x": 12,
+    "y": 66,
+    "w": 12,
+    "h": 8
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prom"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "rate(hikaricp_connections_acquire_seconds_sum{host=~\"$host\"}[5m]) / rate(hikaricp_connections_acquire_seconds_count{host=~\"$host\"}[5m])",
+     "legendFormat": "{{host}} 평균 획득"
+    },
+    {
+     "refId": "B",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "increase(hikaricp_connections_timeout_total{host=~\"$host\"}[5m])",
+     "legendFormat": "{{host}} 타임아웃"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "custom": {
+      "drawStyle": "line",
+      "lineWidth": 2,
+      "fillOpacity": 8,
+      "gradientMode": "opacity",
+      "showPoints": "never",
+      "spanNulls": false,
+      "axisSoftMin": 0
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "table",
+     "placement": "bottom",
+     "showLegend": true,
+     "calcs": [
+      "lastNotNull",
+      "max"
+     ]
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   }
   }
  ]
 }

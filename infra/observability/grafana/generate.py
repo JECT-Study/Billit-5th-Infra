@@ -244,8 +244,8 @@ def write_rules():
 
 
 # ---- 대시보드 -----------------------------------------------------------------
-# 원칙: 지금 실제로 들어오는 지표·로그만 기본 화면에 둔다. 실제 BE 앱 연결 전에는 데이터가 생길 수 없는
-# Spring Boot 지표는 접힌 행에 두고, 비어 있는 이유를 글 패널로 적는다(빈 그래프를 고장으로 오해하지 않게).
+# 원칙: 지금 실제로 들어오는 지표·로그만 기본 화면에 둔다. 데이터가 비는 이유가 정해져 있는 패널은
+# 설명에 그 이유를 적는다(빈 그래프를 고장으로 오해하지 않게).
 
 DS_TYPE = {PROM: "prometheus", LOKI: "loki"}
 TEMPO = "ject-tempo-dev"   # 개발 VM에만 opt-in 설치(otel/README.md). 없으면 링크만 열리지 않는다.
@@ -590,9 +590,8 @@ def app():
     b.var("host", 'label_values(up{job="app"}, host)', label="앱 서버")
     b.text("지금 보이는 것", (
         "- **웹 요청(Nginx 로그 기준)** 행은 지금도 실제 요청으로 채워집니다. 접속 시험(Blackbox)은 요청 수에서 뺐습니다.\n"
-        "- 개발·운영 BE는 아직 **배포 시험용 앱(스모크 앱)** 입니다. 실제 BE(Spring Boot)가 관리 포트 8081의 "
-        "`/actuator/prometheus`를 열고 배포되면 맨 아래 **Spring Boot 지표** 행(접혀 있음)이 채워집니다. 그 전까지 비어 있는 것이 정상입니다.\n"
-        "- 같은 시기 「앱 지표 끊김」 외 HTTP·DB 경보는 지표가 없어 '수집 없음'으로 보입니다."), h=4)
+        "- 개발 BE는 실제 앱(Spring Boot)이 develop 병합 때마다 자동 배포되며, 맨 아래 **Spring Boot 지표** 행에 보입니다.\n"
+        "- 운영 BE는 첫 운영 배포 전까지 **배포 시험용 앱(스모크 앱)** 입니다. 그동안 운영의 Spring Boot 지표는 비어 있는 것이 정상입니다."), h=4)
 
     b.row("상태")
     b.stat("앱 지표 수집", [q('last_over_time(up{job="app", host=~"$host"}[2m])', "{{host}}")], w=6,
@@ -607,7 +606,7 @@ def app():
                        {"matcher": {"id": "byName", "options": "Value"}, "properties": [{"id": "custom.hidden", "value": True}]},
                        {"matcher": {"id": "byName", "options": "host"}, "properties": [{"id": "displayName", "value": "서버"}]},
                        {"matcher": {"id": "byName", "options": "version"}, "properties": [{"id": "displayName", "value": "커밋"}]}],
-            desc="지금은 스모크 앱의 빌드 커밋입니다. 실제 앱이 오면 비게 되며, 그때는 배포 기록(ject-deploy status)으로 확인합니다.")
+            desc="스모크 앱의 빌드 커밋만 보입니다. 실제 BE의 버전은 배포 기록(ject-deploy status)으로 확인합니다.")
 
     b.row("웹 요청 (Nginx 접근 로그 기준)")
     by_class = [
@@ -648,17 +647,18 @@ def app():
     b.ts("FE 로그 줄 수", [q('sum by(host) (count_over_time({service="fe"} [$__auto]))', "{{host}}")], w=9, h=5, ds=LOKI, options=TS_NOLEGEND,
          unit="short", field=BARS_FIELD, desc="운영 FE는 아직 배포 전이라 개발 서버만 보입니다.")
 
-    b.row("배포 시험용 앱(스모크 앱)")
+    b.row("배포 시험용 앱(스모크 앱, 운영)")
     b.ts("스모크 앱 요청", [q('sum by(host, pattern, status) (rate(ject_smoke_http_requests_total{host=~"$host"}[5m]))', "{{host}} {{pattern}} {{status}}")],
-         w=24, h=8, unit="reqps", options=dict(TS, legend={"displayMode": "table", "placement": "right", "showLegend": True, "calcs": ["lastNotNull"]}), desc="실제 BE가 배포되면 이 지표는 사라지고 아래 Spring Boot 지표로 바뀝니다.")
+         w=24, h=8, unit="reqps", options=dict(TS, legend={"displayMode": "table", "placement": "right", "showLegend": True, "calcs": ["lastNotNull"]}), desc="운영에 실제 BE가 배포되면 이 지표는 사라지고 아래 Spring Boot 지표로 바뀝니다.")
 
-    b.row("Spring Boot 지표 — 실제 BE 앱 배포 후 표시 (펼치기)", collapsed=True)
+    b.row("Spring Boot 지표")
     b.ts("요청 수", [q('sum by(host) (rate(http_server_requests_seconds_count{host=~"$host"}[5m]))', "{{host}}")], w=8, unit="reqps",
          overrides=HOST_RENAMES)
     b.ts("5xx 비율", [q('sum by(host) (rate(http_server_requests_seconds_count{host=~"$host", status=~"5.."}[5m])) / sum by(host) (rate(http_server_requests_seconds_count{host=~"$host"}[5m]))', "{{host}}")],
          w=8, unit="percentunit", field=line_thresholds(TS_FIELD, [(None, "transparent"), (0.05, RED)]), overrides=HOST_RENAMES)
     b.ts("응답 p95", [q('histogram_quantile(0.95, sum by(le, host) (rate(http_server_requests_seconds_bucket{host=~"$host", uri!~"/actuator.*|/readyz|/healthz"}[5m])))', "{{host}}")],
-         w=8, unit="s", field=line_thresholds(TS_FIELD, [(None, "transparent"), (1, RED)]), overrides=HOST_RENAMES)
+         w=8, unit="s", field=line_thresholds(TS_FIELD, [(None, "transparent"), (1, RED)]), overrides=HOST_RENAMES,
+         desc="앱이 응답 시간 구간별 지표(http.server.requests 히스토그램)를 내보내야 그려집니다. 지금 BE 설정에는 없어 비어 있습니다.")
     b.panel("table", "경로별 요청·평균 응답(5분)",
             [q('sum by(host, method, uri, status) (rate(http_server_requests_seconds_count{host=~"$host"}[5m]))', format="table", instant=True),
              q('sum by(host, method, uri, status) (rate(http_server_requests_seconds_sum{host=~"$host"}[5m])) / sum by(host, method, uri, status) (rate(http_server_requests_seconds_count{host=~"$host"}[5m]))', format="table", instant=True)],
@@ -699,9 +699,9 @@ def logs():
          w=12, h=7, ds=LOKI, unit="short", field=BARS_FIELD, options=TS_SUM_RIGHT,
          overrides=[{"matcher": {"id": "byRegexp", "options": "5.."}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": RED}}]}],
          desc="접속 시험(1분마다)도 포함합니다. 444는 알 수 없는 주소로 들어온 요청을 끊은 것입니다.")
-    b.ts("로그 수준별(앱 JSON 로그만 · 실제 BE 배포 후 표시)", [q(f'sum by(level) (count_over_time({{env=~"$env", host=~"$host", service=~"$service", level=~".+"}} [$__auto]))', "{{level}}")],
+    b.ts("로그 수준별(앱 JSON 로그만)", [q(f'sum by(level) (count_over_time({{env=~"$env", host=~"$host", service=~"$service", level=~".+"}} [$__auto]))', "{{level}}")],
          w=12, h=7, ds=LOKI, unit="short", field=BARS_FIELD, options=TS_SUM_RIGHT,
-         desc="Spring Boot(ECS) 로그의 level 값으로 나눕니다. 실제 BE 앱 배포 전에는 비어 있습니다. 「운영 오류 로그 급증」 경보도 이 값을 씁니다.")
+         desc="Spring Boot(ECS) 로그의 level 값으로 나눕니다. 운영은 실제 BE 배포 전까지 비어 있습니다. 「운영 오류 로그 급증」 경보도 이 값을 씁니다.")
     b.panel("logs", "로그 본문", [q(sel)], w=24, h=16, ds=LOKI,
             desc="Loki 7일 보관. 비밀번호·토큰·이메일·전화번호 등 주요 패턴은 수집 단계에서 가립니다(모양이 정해지지 않은 값은 못 가림).",
             options={"showTime": True, "wrapLogMessage": True, "sortOrder": "Descending", "enableLogDetails": True,

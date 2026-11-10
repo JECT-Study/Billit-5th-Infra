@@ -317,7 +317,7 @@
   },
   {
    "type": "timeseries",
-   "title": "로그 수준별(앱 JSON 로그만 · 실제 BE 배포 후 표시)",
+   "title": "로그 수준별(앱 JSON 로그만)",
    "id": 4,
    "gridPos": {
     "x": 12,
@@ -371,7 +371,7 @@
      "sort": "desc"
     }
    },
-   "description": "Spring Boot(ECS) 로그의 level 값으로 나눕니다. 실제 BE 앱 배포 전에는 비어 있습니다. 「운영 오류 로그 급증」 경보도 이 값을 씁니다."
+   "description": "Spring Boot(ECS) 로그의 level 값으로 나눕니다. 운영은 실제 BE 배포 전까지 비어 있습니다. 「운영 오류 로그 급증」 경보도 이 값을 씁니다."
   },
   {
    "type": "logs",
