@@ -9,17 +9,50 @@
  "version": 1,
  "editable": false,
  "refresh": "1m",
+ "graphTooltip": 1,
+ "liveNow": false,
  "time": {
   "from": "now-6h",
   "to": "now"
  },
+ "timepicker": {
+  "refresh_intervals": [
+   "30s",
+   "1m",
+   "5m",
+   "15m"
+  ]
+ },
+ "links": [
+  {
+   "title": "JECT 대시보드",
+   "type": "dashboards",
+   "tags": [
+    "ject"
+   ],
+   "asDropdown": true,
+   "includeVars": false,
+   "keepTime": true,
+   "targetBlank": false,
+   "icon": "external link"
+  },
+  {
+   "title": "추적 검색(Tempo·개발)",
+   "type": "link",
+   "url": "/explore?schemaVersion=1&panes=%7B%22t%22:%7B%22datasource%22:%22ject-tempo-dev%22,%22queries%22:%5B%7B%22refId%22:%22A%22,%22datasource%22:%7B%22type%22:%22tempo%22,%22uid%22:%22ject-tempo-dev%22%7D,%22queryType%22:%22traceqlSearch%22,%22limit%22:20%7D%5D,%22range%22:%7B%22from%22:%22now-1h%22,%22to%22:%22now%22%7D%7D%7D",
+   "icon": "info",
+   "keepTime": false,
+   "targetBlank": false,
+   "tooltip": "개발 인프라의 OpenTelemetry 추적. 실제 앱 계측 연결 전에는 합성 시험 추적만 있습니다."
+  }
+ ],
  "templating": {
   "list": []
  },
  "panels": [
   {
    "type": "row",
-   "title": "서버 (Node Exporter)",
+   "title": "한눈에 보기",
    "id": 1,
    "collapsed": false,
    "gridPos": {
@@ -32,13 +65,13 @@
   },
   {
    "type": "stat",
-   "title": "지표 수집",
+   "title": "서버 지표 수집",
    "id": 2,
    "gridPos": {
     "x": 0,
     "y": 1,
     "w": 6,
-    "h": 5
+    "h": 4
    },
    "datasource": {
     "type": "prometheus",
@@ -63,17 +96,72 @@
        "options": {
         "0": {
          "text": "끊김",
-         "color": "red"
+         "color": "red",
+         "index": 0
         },
         "1": {
          "text": "정상",
-         "color": "green"
+         "color": "green",
+         "index": 1
         }
        }
       }
-     ]
+     ],
+     "color": {
+      "mode": "thresholds"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "red",
+        "value": null
+       },
+       {
+        "color": "green",
+        "value": 1
+       }
+      ]
+     }
     },
-    "overrides": []
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "prod-app"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "운영 앱 서버"
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "prod-data"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "운영 DB 서버"
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "dev"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "개발·모니터링 서버"
+       }
+      ]
+     }
+    ]
    },
    "options": {
     "reduceOptions": {
@@ -85,641 +173,23 @@
     },
     "colorMode": "background",
     "graphMode": "none",
-    "textMode": "value_and_name"
-   }
+    "textMode": "value_and_name",
+    "justifyMode": "center",
+    "orientation": "auto",
+    "wideLayout": true,
+    "showPercentChange": false
+   },
+   "description": "2분 안에 Node Exporter 지표가 들어왔는지. 끊김이면 VM·수집기·네트워크를 확인합니다. 서버 이름: 운영 앱 서버(prod-app, 공개 Nginx·운영 앱), 운영 DB 서버(prod-data, PostgreSQL·Redis), 개발·모니터링 서버(dev, 개발 앱·DB·Redis와 Prometheus·Loki·Grafana)."
   },
   {
    "type": "stat",
-   "title": "디스크 사용률(/)",
+   "title": "공인 주소 접속 시험",
    "id": 3,
    "gridPos": {
     "x": 6,
     "y": 1,
-    "w": 6,
-    "h": 5
-   },
-   "datasource": {
-    "type": "prometheus",
-    "uid": "prom"
-   },
-   "targets": [
-    {
-     "refId": "A",
-     "datasource": {
-      "type": "prometheus",
-      "uid": "prom"
-     },
-     "expr": "100 * (1 - node_filesystem_avail_bytes{mountpoint=\"/\"} / node_filesystem_size_bytes{mountpoint=\"/\"})",
-     "legendFormat": "{{host}}"
-    }
-   ],
-   "fieldConfig": {
-    "defaults": {
-     "unit": "percent",
-     "thresholds": {
-      "mode": "absolute",
-      "steps": [
-       {
-        "color": "green",
-        "value": null
-       },
-       {
-        "color": "orange",
-        "value": 80
-       },
-       {
-        "color": "red",
-        "value": 90
-       }
-      ]
-     }
-    },
-    "overrides": []
-   },
-   "options": {
-    "reduceOptions": {
-     "calcs": [
-      "lastNotNull"
-     ],
-     "fields": "",
-     "values": false
-    },
-    "colorMode": "background",
-    "graphMode": "none",
-    "textMode": "value_and_name"
-   }
-  },
-  {
-   "type": "stat",
-   "title": "가용 메모리",
-   "id": 4,
-   "gridPos": {
-    "x": 12,
-    "y": 1,
-    "w": 6,
-    "h": 5
-   },
-   "datasource": {
-    "type": "prometheus",
-    "uid": "prom"
-   },
-   "targets": [
-    {
-     "refId": "A",
-     "datasource": {
-      "type": "prometheus",
-      "uid": "prom"
-     },
-     "expr": "100 * node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes",
-     "legendFormat": "{{host}}"
-    }
-   ],
-   "fieldConfig": {
-    "defaults": {
-     "unit": "percent",
-     "thresholds": {
-      "mode": "absolute",
-      "steps": [
-       {
-        "color": "red",
-        "value": null
-       },
-       {
-        "color": "orange",
-        "value": 15
-       },
-       {
-        "color": "green",
-        "value": 30
-       }
-      ]
-     }
-    },
-    "overrides": []
-   },
-   "options": {
-    "reduceOptions": {
-     "calcs": [
-      "lastNotNull"
-     ],
-     "fields": "",
-     "values": false
-    },
-    "colorMode": "background",
-    "graphMode": "none",
-    "textMode": "value_and_name"
-   }
-  },
-  {
-   "type": "stat",
-   "title": "가동 시간",
-   "id": 5,
-   "gridPos": {
-    "x": 18,
-    "y": 1,
-    "w": 6,
-    "h": 5
-   },
-   "datasource": {
-    "type": "prometheus",
-    "uid": "prom"
-   },
-   "targets": [
-    {
-     "refId": "A",
-     "datasource": {
-      "type": "prometheus",
-      "uid": "prom"
-     },
-     "expr": "time() - node_boot_time_seconds",
-     "legendFormat": "{{host}}"
-    }
-   ],
-   "fieldConfig": {
-    "defaults": {
-     "unit": "s"
-    },
-    "overrides": []
-   },
-   "options": {
-    "reduceOptions": {
-     "calcs": [
-      "lastNotNull"
-     ],
-     "fields": "",
-     "values": false
-    },
-    "colorMode": "background",
-    "graphMode": "none",
-    "textMode": "value_and_name"
-   }
-  },
-  {
-   "type": "timeseries",
-   "title": "CPU 사용률(iowait 제외)·I/O 대기",
-   "id": 6,
-   "gridPos": {
-    "x": 0,
-    "y": 6,
-    "w": 8,
-    "h": 8
-   },
-   "datasource": {
-    "type": "prometheus",
-    "uid": "prom"
-   },
-   "targets": [
-    {
-     "refId": "A",
-     "datasource": {
-      "type": "prometheus",
-      "uid": "prom"
-     },
-     "expr": "100 * (1 - avg by(host) (sum by(host, cpu) (rate(node_cpu_seconds_total{mode=~\"idle|iowait\"}[5m]))))",
-     "legendFormat": "{{host}} 사용"
-    },
-    {
-     "refId": "B",
-     "datasource": {
-      "type": "prometheus",
-      "uid": "prom"
-     },
-     "expr": "100 * avg by(host) (rate(node_cpu_seconds_total{mode=\"iowait\"}[5m]))",
-     "legendFormat": "{{host}} iowait"
-    }
-   ],
-   "fieldConfig": {
-    "defaults": {
-     "unit": "percent"
-    },
-    "overrides": []
-   },
-   "options": {}
-  },
-  {
-   "type": "timeseries",
-   "title": "가용 메모리",
-   "id": 7,
-   "gridPos": {
-    "x": 8,
-    "y": 6,
-    "w": 8,
-    "h": 8
-   },
-   "datasource": {
-    "type": "prometheus",
-    "uid": "prom"
-   },
-   "targets": [
-    {
-     "refId": "A",
-     "datasource": {
-      "type": "prometheus",
-      "uid": "prom"
-     },
-     "expr": "node_memory_MemAvailable_bytes",
-     "legendFormat": "{{host}}"
-    }
-   ],
-   "fieldConfig": {
-    "defaults": {
-     "unit": "bytes"
-    },
-    "overrides": []
-   },
-   "options": {}
-  },
-  {
-   "type": "timeseries",
-   "title": "디스크 사용량(/)",
-   "id": 8,
-   "gridPos": {
-    "x": 16,
-    "y": 6,
-    "w": 8,
-    "h": 8
-   },
-   "datasource": {
-    "type": "prometheus",
-    "uid": "prom"
-   },
-   "targets": [
-    {
-     "refId": "A",
-     "datasource": {
-      "type": "prometheus",
-      "uid": "prom"
-     },
-     "expr": "node_filesystem_size_bytes{mountpoint=\"/\"} - node_filesystem_avail_bytes{mountpoint=\"/\"}",
-     "legendFormat": "{{host}}"
-    }
-   ],
-   "fieldConfig": {
-    "defaults": {
-     "unit": "bytes"
-    },
-    "overrides": []
-   },
-   "options": {}
-  },
-  {
-   "type": "timeseries",
-   "title": "네트워크 수신",
-   "id": 9,
-   "gridPos": {
-    "x": 0,
-    "y": 14,
-    "w": 8,
-    "h": 8
-   },
-   "datasource": {
-    "type": "prometheus",
-    "uid": "prom"
-   },
-   "targets": [
-    {
-     "refId": "A",
-     "datasource": {
-      "type": "prometheus",
-      "uid": "prom"
-     },
-     "expr": "sum by(host) (rate(node_network_receive_bytes_total{device!~\"lo|veth.*|docker.*|br-.*\"}[5m]))",
-     "legendFormat": "{{host}}"
-    }
-   ],
-   "fieldConfig": {
-    "defaults": {
-     "unit": "Bps"
-    },
-    "overrides": []
-   },
-   "options": {}
-  },
-  {
-   "type": "timeseries",
-   "title": "네트워크 송신",
-   "id": 10,
-   "gridPos": {
-    "x": 8,
-    "y": 14,
-    "w": 8,
-    "h": 8
-   },
-   "datasource": {
-    "type": "prometheus",
-    "uid": "prom"
-   },
-   "targets": [
-    {
-     "refId": "A",
-     "datasource": {
-      "type": "prometheus",
-      "uid": "prom"
-     },
-     "expr": "sum by(host) (rate(node_network_transmit_bytes_total{device!~\"lo|veth.*|docker.*|br-.*\"}[5m]))",
-     "legendFormat": "{{host}}"
-    }
-   ],
-   "fieldConfig": {
-    "defaults": {
-     "unit": "Bps"
-    },
-    "overrides": []
-   },
-   "options": {}
-  },
-  {
-   "type": "timeseries",
-   "title": "디스크 I/O 사용 시간",
-   "id": 11,
-   "gridPos": {
-    "x": 16,
-    "y": 14,
-    "w": 8,
-    "h": 8
-   },
-   "datasource": {
-    "type": "prometheus",
-    "uid": "prom"
-   },
-   "targets": [
-    {
-     "refId": "A",
-     "datasource": {
-      "type": "prometheus",
-      "uid": "prom"
-     },
-     "expr": "sum by(host) (rate(node_disk_io_time_seconds_total[5m]))",
-     "legendFormat": "{{host}}"
-    }
-   ],
-   "fieldConfig": {
-    "defaults": {
-     "unit": "percentunit"
-    },
-    "overrides": []
-   },
-   "options": {}
-  },
-  {
-   "type": "row",
-   "title": "백업·복원 (운영 DB)",
-   "id": 12,
-   "collapsed": false,
-   "gridPos": {
-    "x": 0,
-    "y": 22,
-    "w": 24,
-    "h": 1
-   },
-   "panels": []
-  },
-  {
-   "type": "stat",
-   "title": "마지막 백업 성공 후",
-   "id": 13,
-   "gridPos": {
-    "x": 0,
-    "y": 23,
-    "w": 6,
-    "h": 5
-   },
-   "datasource": {
-    "type": "prometheus",
-    "uid": "prom"
-   },
-   "targets": [
-    {
-     "refId": "A",
-     "datasource": {
-      "type": "prometheus",
-      "uid": "prom"
-     },
-     "expr": "time() - ject_backup_last_success_timestamp_seconds",
-     "legendFormat": "경과"
-    }
-   ],
-   "fieldConfig": {
-    "defaults": {
-     "unit": "s",
-     "thresholds": {
-      "mode": "absolute",
-      "steps": [
-       {
-        "color": "green",
-        "value": null
-       },
-       {
-        "color": "red",
-        "value": 93600
-       }
-      ]
-     }
-    },
-    "overrides": []
-   },
-   "options": {
-    "reduceOptions": {
-     "calcs": [
-      "lastNotNull"
-     ],
-     "fields": "",
-     "values": false
-    },
-    "colorMode": "background",
-    "graphMode": "none",
-    "textMode": "value_and_name"
-   }
-  },
-  {
-   "type": "stat",
-   "title": "마지막 백업 결과",
-   "id": 14,
-   "gridPos": {
-    "x": 6,
-    "y": 23,
-    "w": 6,
-    "h": 5
-   },
-   "datasource": {
-    "type": "prometheus",
-    "uid": "prom"
-   },
-   "targets": [
-    {
-     "refId": "A",
-     "datasource": {
-      "type": "prometheus",
-      "uid": "prom"
-     },
-     "expr": "ject_backup_last_run_success",
-     "legendFormat": "결과"
-    }
-   ],
-   "fieldConfig": {
-    "defaults": {
-     "mappings": [
-      {
-       "type": "value",
-       "options": {
-        "0": {
-         "text": "실패",
-         "color": "red"
-        },
-        "1": {
-         "text": "성공",
-         "color": "green"
-        }
-       }
-      }
-     ]
-    },
-    "overrides": []
-   },
-   "options": {
-    "reduceOptions": {
-     "calcs": [
-      "lastNotNull"
-     ],
-     "fields": "",
-     "values": false
-    },
-    "colorMode": "background",
-    "graphMode": "none",
-    "textMode": "value_and_name"
-   }
-  },
-  {
-   "type": "stat",
-   "title": "마지막 백업 크기·소요",
-   "id": 15,
-   "gridPos": {
-    "x": 12,
-    "y": 23,
-    "w": 6,
-    "h": 5
-   },
-   "datasource": {
-    "type": "prometheus",
-    "uid": "prom"
-   },
-   "targets": [
-    {
-     "refId": "A",
-     "datasource": {
-      "type": "prometheus",
-      "uid": "prom"
-     },
-     "expr": "ject_backup_last_success_bytes",
-     "legendFormat": "크기"
-    },
-    {
-     "refId": "B",
-     "datasource": {
-      "type": "prometheus",
-      "uid": "prom"
-     },
-     "expr": "ject_backup_last_duration_seconds",
-     "legendFormat": "소요(초)"
-    }
-   ],
-   "fieldConfig": {
-    "defaults": {},
-    "overrides": []
-   },
-   "options": {
-    "reduceOptions": {
-     "calcs": [
-      "lastNotNull"
-     ],
-     "fields": "",
-     "values": false
-    },
-    "colorMode": "background",
-    "graphMode": "none",
-    "textMode": "value_and_name"
-   }
-  },
-  {
-   "type": "stat",
-   "title": "마지막 복원 시험",
-   "id": 16,
-   "gridPos": {
-    "x": 18,
-    "y": 23,
-    "w": 6,
-    "h": 5
-   },
-   "datasource": {
-    "type": "prometheus",
-    "uid": "prom"
-   },
-   "targets": [
-    {
-     "refId": "A",
-     "datasource": {
-      "type": "prometheus",
-      "uid": "prom"
-     },
-     "expr": "ject_restore_test_last_run_success",
-     "legendFormat": "결과"
-    }
-   ],
-   "fieldConfig": {
-    "defaults": {
-     "mappings": [
-      {
-       "type": "value",
-       "options": {
-        "0": {
-         "text": "실패",
-         "color": "red"
-        },
-        "1": {
-         "text": "성공",
-         "color": "green"
-        }
-       }
-      }
-     ]
-    },
-    "overrides": []
-   },
-   "options": {
-    "reduceOptions": {
-     "calcs": [
-      "lastNotNull"
-     ],
-     "fields": "",
-     "values": false
-    },
-    "colorMode": "background",
-    "graphMode": "none",
-    "textMode": "value_and_name"
-   }
-  },
-  {
-   "type": "row",
-   "title": "공인 주소 시험·인증서 (개발·모니터링 VM → NAT → 공인 HTTPS)",
-   "id": 17,
-   "collapsed": false,
-   "gridPos": {
-    "x": 0,
-    "y": 28,
-    "w": 24,
-    "h": 1
-   },
-   "panels": []
-  },
-  {
-   "type": "stat",
-   "title": "접속 시험",
-   "id": 18,
-   "gridPos": {
-    "x": 0,
-    "y": 29,
-    "w": 8,
-    "h": 5
+    "w": 7,
+    "h": 4
    },
    "datasource": {
     "type": "prometheus",
@@ -744,17 +214,72 @@
        "options": {
         "0": {
          "text": "실패",
-         "color": "red"
+         "color": "red",
+         "index": 0
         },
         "1": {
-         "text": "정상",
-         "color": "green"
+         "text": "성공",
+         "color": "green",
+         "index": 1
         }
        }
       }
-     ]
+     ],
+     "color": {
+      "mode": "thresholds"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "red",
+        "value": null
+       },
+       {
+        "color": "green",
+        "value": 1
+       }
+      ]
+     }
     },
-    "overrides": []
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "prod"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "운영 API (/readyz)"
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "dev"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "개발 API (/readyz)"
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "dev-fe"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "개발 웹 FE (/healthz)"
+       }
+      ]
+     }
+    ]
    },
    "options": {
     "reduceOptions": {
@@ -766,18 +291,23 @@
     },
     "colorMode": "background",
     "graphMode": "none",
-    "textMode": "value_and_name"
-   }
+    "textMode": "value_and_name",
+    "justifyMode": "center",
+    "orientation": "auto",
+    "wideLayout": true,
+    "showPercentChange": false
+   },
+   "description": "개발·모니터링 서버가 1분마다 공인 HTTPS 주소에 접속합니다(OCI Health Checks 대신). API는 /readyz(DB·Redis 연결 포함), 웹은 /healthz."
   },
   {
    "type": "stat",
-   "title": "인증서 남은 기간",
-   "id": 19,
+   "title": "인증서 남은 기간(가장 짧은 것)",
+   "id": 4,
    "gridPos": {
-    "x": 8,
-    "y": 29,
-    "w": 8,
-    "h": 5
+    "x": 13,
+    "y": 1,
+    "w": 4,
+    "h": 4
    },
    "datasource": {
     "type": "prometheus",
@@ -790,13 +320,12 @@
       "type": "prometheus",
       "uid": "prom"
      },
-     "expr": "(probe_ssl_earliest_cert_expiry - time()) / 86400",
-     "legendFormat": "{{target}}"
+     "expr": "min((probe_ssl_earliest_cert_expiry - time()) / 86400)",
+     "legendFormat": "남은 일수"
     }
    ],
    "fieldConfig": {
     "defaults": {
-     "unit": "d",
      "thresholds": {
       "mode": "absolute",
       "steps": [
@@ -813,6 +342,156 @@
         "value": 30
        }
       ]
+     },
+     "unit": "suffix:일",
+     "decimals": 0
+    },
+    "overrides": []
+   },
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "colorMode": "background",
+    "graphMode": "none",
+    "textMode": "value_and_name",
+    "justifyMode": "center",
+    "orientation": "auto",
+    "wideLayout": true,
+    "showPercentChange": false
+   },
+   "description": "자동 갱신은 만료 30일 전부터 시도합니다. 14일 미만이면 경보가 울립니다. 지금은 임시 이름(sslip.io) 인증서입니다."
+  },
+  {
+   "type": "stat",
+   "title": "마지막 백업 성공 후",
+   "id": 5,
+   "gridPos": {
+    "x": 17,
+    "y": 1,
+    "w": 4,
+    "h": 4
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prom"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "time() - ject_backup_last_success_timestamp_seconds",
+     "legendFormat": "경과"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "orange",
+        "value": 90000
+       },
+       {
+        "color": "red",
+        "value": 93600
+       }
+      ]
+     },
+     "unit": "s",
+     "decimals": 1
+    },
+    "overrides": []
+   },
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "colorMode": "background",
+    "graphMode": "none",
+    "textMode": "value_and_name",
+    "justifyMode": "center",
+    "orientation": "auto",
+    "wideLayout": true,
+    "showPercentChange": false
+   },
+   "description": "운영 DB는 매일 04:00 KST에 백업합니다. 26시간을 넘으면 경보가 울립니다."
+  },
+  {
+   "type": "stat",
+   "title": "월간 복원 시험",
+   "id": 6,
+   "gridPos": {
+    "x": 21,
+    "y": 1,
+    "w": 3,
+    "h": 4
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prom"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "ject_restore_test_last_run_success",
+     "legendFormat": "마지막 결과"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "mappings": [
+      {
+       "type": "value",
+       "options": {
+        "0": {
+         "text": "실패",
+         "color": "red",
+         "index": 0
+        },
+        "1": {
+         "text": "성공",
+         "color": "green",
+         "index": 1
+        }
+       }
+      }
+     ],
+     "color": {
+      "mode": "thresholds"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "red",
+        "value": null
+       },
+       {
+        "color": "green",
+        "value": 1
+       }
+      ]
      }
     },
     "overrides": []
@@ -827,18 +506,1574 @@
     },
     "colorMode": "background",
     "graphMode": "none",
-    "textMode": "value_and_name"
+    "textMode": "value_and_name",
+    "justifyMode": "center",
+    "orientation": "auto",
+    "wideLayout": true,
+    "showPercentChange": false
+   },
+   "description": "매월 1일 05:00 KST에 백업을 격리 환경에 복원해 봅니다."
+  },
+  {
+   "type": "alertlist",
+   "title": "지금 울리는 경보",
+   "id": 7,
+   "gridPos": {
+    "x": 0,
+    "y": 5,
+    "w": 24,
+    "h": 4
+   },
+   "options": {
+    "viewMode": "list",
+    "groupMode": "default",
+    "groupBy": [],
+    "maxItems": 20,
+    "sortOrder": 1,
+    "dashboardAlerts": false,
+    "alertName": "",
+    "alertInstanceLabelFilter": "",
+    "datasource": "grafana",
+    "stateFilter": {
+     "firing": true,
+     "pending": true,
+     "noData": false,
+     "normal": false,
+     "error": true,
+     "recovering": true
+    }
+   },
+   "description": "발생·대기·오류 상태인 Grafana 경보만 보입니다. 비어 있으면 울리는 경보가 없다는 뜻입니다. 실제 앱 연결 전이라 지표가 없는 경보(수집 없음)는 여기서 뺐습니다."
+  },
+  {
+   "type": "row",
+   "title": "서버 자원",
+   "id": 8,
+   "collapsed": false,
+   "gridPos": {
+    "x": 0,
+    "y": 9,
+    "w": 24,
+    "h": 1
+   },
+   "panels": []
+  },
+  {
+   "type": "bargauge",
+   "title": "CPU 사용률",
+   "id": 9,
+   "gridPos": {
+    "x": 0,
+    "y": 10,
+    "w": 6,
+    "h": 6
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prom"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "100 * (1 - avg by(host) (sum by(host, cpu) (rate(node_cpu_seconds_total{mode=~\"idle|iowait\"}[5m]))))",
+     "legendFormat": "{{host}}"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "orange",
+        "value": 70
+       },
+       {
+        "color": "red",
+        "value": 85
+       }
+      ]
+     },
+     "min": 0,
+     "max": 100,
+     "unit": "percent",
+     "decimals": 0
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "prod-app"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "운영 앱 서버"
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "prod-data"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "운영 DB 서버"
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "dev"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "개발·모니터링 서버"
+       }
+      ]
+     }
+    ]
+   },
+   "options": {
+    "orientation": "horizontal",
+    "displayMode": "gradient",
+    "showUnfilled": true,
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    }
+   },
+   "description": "I/O 대기(iowait)는 빼고 계산합니다. 서버당 1 OCPU라 10분 넘게 85%면 경보가 울립니다."
+  },
+  {
+   "type": "bargauge",
+   "title": "메모리 사용률",
+   "id": 10,
+   "gridPos": {
+    "x": 6,
+    "y": 10,
+    "w": 6,
+    "h": 6
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prom"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "100 * (1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)",
+     "legendFormat": "{{host}}"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "orange",
+        "value": 75
+       },
+       {
+        "color": "red",
+        "value": 85
+       }
+      ]
+     },
+     "min": 0,
+     "max": 100,
+     "unit": "percent",
+     "decimals": 0
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "prod-app"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "운영 앱 서버"
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "prod-data"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "운영 DB 서버"
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "dev"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "개발·모니터링 서버"
+       }
+      ]
+     }
+    ]
+   },
+   "options": {
+    "orientation": "horizontal",
+    "displayMode": "gradient",
+    "showUnfilled": true,
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    }
+   },
+   "description": "캐시를 뺀 실제 사용률(1 - 가용/전체). 가용 메모리가 15% 미만(사용률 85% 초과)이면 경보가 울립니다."
+  },
+  {
+   "type": "bargauge",
+   "title": "디스크 사용률(/)",
+   "id": 11,
+   "gridPos": {
+    "x": 12,
+    "y": 10,
+    "w": 6,
+    "h": 6
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prom"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "100 * (1 - node_filesystem_avail_bytes{mountpoint=\"/\"} / node_filesystem_size_bytes{mountpoint=\"/\"})",
+     "legendFormat": "{{host}}"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "orange",
+        "value": 80
+       },
+       {
+        "color": "red",
+        "value": 90
+       }
+      ]
+     },
+     "min": 0,
+     "max": 100,
+     "unit": "percent",
+     "decimals": 0
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "prod-app"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "운영 앱 서버"
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "prod-data"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "운영 DB 서버"
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "dev"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "개발·모니터링 서버"
+       }
+      ]
+     }
+    ]
+   },
+   "options": {
+    "orientation": "horizontal",
+    "displayMode": "gradient",
+    "showUnfilled": true,
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    }
+   },
+   "description": "무료 블록 200GB를 모두 써서 디스크를 늘릴 수 없습니다. 80%·90%에 경보, 여유 15% 미만이면 배포가 거부됩니다."
+  },
+  {
+   "type": "stat",
+   "title": "가동 시간",
+   "id": 12,
+   "gridPos": {
+    "x": 18,
+    "y": 10,
+    "w": 6,
+    "h": 6
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prom"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "time() - node_boot_time_seconds",
+     "legendFormat": "{{host}}"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "s",
+     "decimals": 0
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "prod-app"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "운영 앱 서버"
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "prod-data"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "운영 DB 서버"
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "dev"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "개발·모니터링 서버"
+       }
+      ]
+     }
+    ]
+   },
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "colorMode": "none",
+    "graphMode": "none",
+    "textMode": "value_and_name",
+    "justifyMode": "center",
+    "orientation": "horizontal",
+    "wideLayout": true,
+    "showPercentChange": false
+   },
+   "description": "마지막 재부팅 후 경과 시간."
+  },
+  {
+   "type": "timeseries",
+   "title": "CPU 사용률",
+   "id": 13,
+   "gridPos": {
+    "x": 0,
+    "y": 16,
+    "w": 8,
+    "h": 8
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prom"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "100 * (1 - avg by(host) (sum by(host, cpu) (rate(node_cpu_seconds_total{mode=~\"idle|iowait\"}[5m]))))",
+     "legendFormat": "{{host}}"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "custom": {
+      "drawStyle": "line",
+      "lineWidth": 2,
+      "fillOpacity": 8,
+      "gradientMode": "opacity",
+      "showPoints": "never",
+      "spanNulls": false,
+      "axisSoftMin": 0,
+      "thresholdsStyle": {
+       "mode": "dashed"
+      }
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "transparent",
+        "value": null
+       },
+       {
+        "color": "red",
+        "value": 85
+       }
+      ]
+     },
+     "unit": "percent",
+     "max": 100
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "prod-app"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "운영 앱 서버"
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "prod-data"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "운영 DB 서버"
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "dev"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "개발·모니터링 서버"
+       }
+      ]
+     }
+    ]
+   },
+   "options": {
+    "legend": {
+     "displayMode": "table",
+     "placement": "bottom",
+     "showLegend": true,
+     "calcs": [
+      "lastNotNull",
+      "max"
+     ]
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
    }
   },
   {
    "type": "timeseries",
-   "title": "응답 시간",
-   "id": 20,
+   "title": "메모리 사용률",
+   "id": 14,
+   "gridPos": {
+    "x": 8,
+    "y": 16,
+    "w": 8,
+    "h": 8
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prom"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "100 * (1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)",
+     "legendFormat": "{{host}}"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "custom": {
+      "drawStyle": "line",
+      "lineWidth": 2,
+      "fillOpacity": 8,
+      "gradientMode": "opacity",
+      "showPoints": "never",
+      "spanNulls": false,
+      "axisSoftMin": 0,
+      "thresholdsStyle": {
+       "mode": "dashed"
+      }
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "transparent",
+        "value": null
+       },
+       {
+        "color": "red",
+        "value": 85
+       }
+      ]
+     },
+     "unit": "percent",
+     "max": 100
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "prod-app"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "운영 앱 서버"
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "prod-data"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "운영 DB 서버"
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "dev"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "개발·모니터링 서버"
+       }
+      ]
+     }
+    ]
+   },
+   "options": {
+    "legend": {
+     "displayMode": "table",
+     "placement": "bottom",
+     "showLegend": true,
+     "calcs": [
+      "lastNotNull",
+      "max"
+     ]
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   }
+  },
+  {
+   "type": "timeseries",
+   "title": "디스크 사용률(/)",
+   "id": 15,
    "gridPos": {
     "x": 16,
-    "y": 29,
+    "y": 16,
     "w": 8,
-    "h": 5
+    "h": 8
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prom"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "100 * (1 - node_filesystem_avail_bytes{mountpoint=\"/\"} / node_filesystem_size_bytes{mountpoint=\"/\"})",
+     "legendFormat": "{{host}}"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "custom": {
+      "drawStyle": "line",
+      "lineWidth": 2,
+      "fillOpacity": 8,
+      "gradientMode": "opacity",
+      "showPoints": "never",
+      "spanNulls": false,
+      "axisSoftMin": 0,
+      "thresholdsStyle": {
+       "mode": "dashed"
+      }
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "transparent",
+        "value": null
+       },
+       {
+        "color": "orange",
+        "value": 80
+       },
+       {
+        "color": "red",
+        "value": 90
+       }
+      ]
+     },
+     "unit": "percent",
+     "max": 100
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "prod-app"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "운영 앱 서버"
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "prod-data"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "운영 DB 서버"
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "dev"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "개발·모니터링 서버"
+       }
+      ]
+     }
+    ]
+   },
+   "options": {
+    "legend": {
+     "displayMode": "table",
+     "placement": "bottom",
+     "showLegend": true,
+     "calcs": [
+      "lastNotNull",
+      "max"
+     ]
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   }
+  },
+  {
+   "type": "timeseries",
+   "title": "네트워크 (위: 수신 · 아래: 송신)",
+   "id": 16,
+   "gridPos": {
+    "x": 0,
+    "y": 24,
+    "w": 8,
+    "h": 8
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prom"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "sum by(host) (rate(node_network_receive_bytes_total{device!~\"lo|veth.*|docker.*|br-.*|tailscale.*\"}[5m]))",
+     "legendFormat": "{{host}} 수신"
+    },
+    {
+     "refId": "B",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "-sum by(host) (rate(node_network_transmit_bytes_total{device!~\"lo|veth.*|docker.*|br-.*|tailscale.*\"}[5m]))",
+     "legendFormat": "{{host}} 송신"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "custom": {
+      "drawStyle": "line",
+      "lineWidth": 2,
+      "fillOpacity": 8,
+      "gradientMode": "opacity",
+      "showPoints": "never",
+      "spanNulls": false,
+      "axisSoftMin": null
+     },
+     "unit": "Bps"
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom",
+     "showLegend": true,
+     "calcs": []
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   }
+  },
+  {
+   "type": "timeseries",
+   "title": "디스크 I/O 사용 시간",
+   "id": 17,
+   "gridPos": {
+    "x": 8,
+    "y": 24,
+    "w": 8,
+    "h": 8
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prom"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "max by(host) (rate(node_disk_io_time_seconds_total[5m]))",
+     "legendFormat": "{{host}}"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "custom": {
+      "drawStyle": "line",
+      "lineWidth": 2,
+      "fillOpacity": 8,
+      "gradientMode": "opacity",
+      "showPoints": "never",
+      "spanNulls": false,
+      "axisSoftMin": 0
+     },
+     "unit": "percentunit",
+     "max": 1
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "prod-app"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "운영 앱 서버"
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "prod-data"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "운영 DB 서버"
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "dev"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "개발·모니터링 서버"
+       }
+      ]
+     }
+    ]
+   },
+   "options": {
+    "legend": {
+     "displayMode": "table",
+     "placement": "bottom",
+     "showLegend": true,
+     "calcs": [
+      "lastNotNull",
+      "max"
+     ]
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "description": "가장 바쁜 디스크가 바빴던 시간 비율. 1(100%)에 붙어 있으면 I/O가 병목입니다."
+  },
+  {
+   "type": "timeseries",
+   "title": "I/O 대기(iowait)",
+   "id": 18,
+   "gridPos": {
+    "x": 16,
+    "y": 24,
+    "w": 8,
+    "h": 8
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prom"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "100 * avg by(host) (rate(node_cpu_seconds_total{mode=\"iowait\"}[5m]))",
+     "legendFormat": "{{host}}"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "custom": {
+      "drawStyle": "line",
+      "lineWidth": 2,
+      "fillOpacity": 8,
+      "gradientMode": "opacity",
+      "showPoints": "never",
+      "spanNulls": false,
+      "axisSoftMin": 0
+     },
+     "unit": "percent"
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "prod-app"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "운영 앱 서버"
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "prod-data"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "운영 DB 서버"
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "dev"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "개발·모니터링 서버"
+       }
+      ]
+     }
+    ]
+   },
+   "options": {
+    "legend": {
+     "displayMode": "table",
+     "placement": "bottom",
+     "showLegend": true,
+     "calcs": [
+      "lastNotNull",
+      "max"
+     ]
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "description": "CPU가 디스크를 기다린 비율. 재부팅·백업 때 잠깐 오르는 것은 정상입니다."
+  },
+  {
+   "type": "row",
+   "title": "백업·복원 (운영 DB)",
+   "id": 19,
+   "collapsed": false,
+   "gridPos": {
+    "x": 0,
+    "y": 32,
+    "w": 24,
+    "h": 1
+   },
+   "panels": []
+  },
+  {
+   "type": "stat",
+   "title": "마지막 백업 결과",
+   "id": 20,
+   "gridPos": {
+    "x": 0,
+    "y": 33,
+    "w": 4,
+    "h": 4
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prom"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "ject_backup_last_run_success",
+     "legendFormat": "결과"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "mappings": [
+      {
+       "type": "value",
+       "options": {
+        "0": {
+         "text": "실패",
+         "color": "red",
+         "index": 0
+        },
+        "1": {
+         "text": "성공",
+         "color": "green",
+         "index": 1
+        }
+       }
+      }
+     ],
+     "color": {
+      "mode": "thresholds"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "red",
+        "value": null
+       },
+       {
+        "color": "green",
+        "value": 1
+       }
+      ]
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "colorMode": "background",
+    "graphMode": "none",
+    "textMode": "value_and_name",
+    "justifyMode": "center",
+    "orientation": "auto",
+    "wideLayout": true,
+    "showPercentChange": false
+   }
+  },
+  {
+   "type": "stat",
+   "title": "마지막 백업 성공 시각",
+   "id": 21,
+   "gridPos": {
+    "x": 4,
+    "y": 33,
+    "w": 5,
+    "h": 4
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prom"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "ject_backup_last_success_timestamp_seconds * 1000",
+     "legendFormat": "시각"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "dateTimeAsLocal"
+    },
+    "overrides": []
+   },
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "colorMode": "none",
+    "graphMode": "none",
+    "textMode": "value",
+    "justifyMode": "center",
+    "orientation": "auto",
+    "wideLayout": true,
+    "showPercentChange": false,
+    "text": {
+     "valueSize": 26
+    }
+   }
+  },
+  {
+   "type": "stat",
+   "title": "백업 크기",
+   "id": 22,
+   "gridPos": {
+    "x": 9,
+    "y": 33,
+    "w": 5,
+    "h": 4
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prom"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "ject_backup_last_success_bytes",
+     "legendFormat": "압축본"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "bytes"
+    },
+    "overrides": []
+   },
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "colorMode": "none",
+    "graphMode": "none",
+    "textMode": "value_and_name",
+    "justifyMode": "center",
+    "orientation": "auto",
+    "wideLayout": true,
+    "showPercentChange": false
+   }
+  },
+  {
+   "type": "stat",
+   "title": "백업 소요 시간",
+   "id": 23,
+   "gridPos": {
+    "x": 14,
+    "y": 33,
+    "w": 3,
+    "h": 4
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prom"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "ject_backup_last_duration_seconds",
+     "legendFormat": "소요"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "s"
+    },
+    "overrides": []
+   },
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "colorMode": "none",
+    "graphMode": "none",
+    "textMode": "value_and_name",
+    "justifyMode": "center",
+    "orientation": "auto",
+    "wideLayout": true,
+    "showPercentChange": false
+   }
+  },
+  {
+   "type": "stat",
+   "title": "마지막 복원 시험",
+   "id": 24,
+   "gridPos": {
+    "x": 17,
+    "y": 33,
+    "w": 3,
+    "h": 4
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prom"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "ject_restore_test_last_run_success",
+     "legendFormat": "결과"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "mappings": [
+      {
+       "type": "value",
+       "options": {
+        "0": {
+         "text": "실패",
+         "color": "red",
+         "index": 0
+        },
+        "1": {
+         "text": "성공",
+         "color": "green",
+         "index": 1
+        }
+       }
+      }
+     ],
+     "color": {
+      "mode": "thresholds"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "red",
+        "value": null
+       },
+       {
+        "color": "green",
+        "value": 1
+       }
+      ]
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "colorMode": "background",
+    "graphMode": "none",
+    "textMode": "value_and_name",
+    "justifyMode": "center",
+    "orientation": "auto",
+    "wideLayout": true,
+    "showPercentChange": false
+   }
+  },
+  {
+   "type": "stat",
+   "title": "복원 시험 후 경과",
+   "id": 25,
+   "gridPos": {
+    "x": 20,
+    "y": 33,
+    "w": 4,
+    "h": 4
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prom"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "time() - ject_restore_test_last_run_timestamp_seconds",
+     "legendFormat": "경과"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "orange",
+        "value": 2764800
+       }
+      ]
+     },
+     "unit": "s",
+     "decimals": 1
+    },
+    "overrides": []
+   },
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "colorMode": "background",
+    "graphMode": "none",
+    "textMode": "value_and_name",
+    "justifyMode": "center",
+    "orientation": "auto",
+    "wideLayout": true,
+    "showPercentChange": false
+   },
+   "description": "매월 1일 실행. 32일을 넘으면 경보가 울립니다. 최근 실행은 복원 성공 증거가 아니니 결과와 같이 봅니다."
+  },
+  {
+   "type": "text",
+   "title": "백업 보관",
+   "id": 26,
+   "gridPos": {
+    "x": 0,
+    "y": 37,
+    "w": 24,
+    "h": 3
+   },
+   "options": {
+    "mode": "markdown",
+    "content": "비공개 Object Storage 버킷에 **최근 7일**을 보관하고, 최신 성공본 7개는 항상 남깁니다(그래서 '최대 7일 후 반드시 삭제'는 아닙니다). 실패하면 경보가 울리고, 고친 뒤 `sudo systemctl start ject-pg-backup`으로 다시 실행합니다."
+   }
+  },
+  {
+   "type": "row",
+   "title": "공인 주소 접속 시험·인증서 (개발·모니터링 서버 → NAT → 공인 HTTPS)",
+   "id": 27,
+   "collapsed": false,
+   "gridPos": {
+    "x": 0,
+    "y": 40,
+    "w": 24,
+    "h": 1
+   },
+   "panels": []
+  },
+  {
+   "type": "state-timeline",
+   "title": "접속 시험 이력",
+   "id": 28,
+   "gridPos": {
+    "x": 0,
+    "y": 41,
+    "w": 12,
+    "h": 6
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prom"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "probe_success",
+     "legendFormat": "{{target}}"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "mappings": [
+      {
+       "type": "value",
+       "options": {
+        "0": {
+         "text": "실패",
+         "color": "red",
+         "index": 0
+        },
+        "1": {
+         "text": "성공",
+         "color": "green",
+         "index": 1
+        }
+       }
+      }
+     ],
+     "color": {
+      "mode": "thresholds"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "red",
+        "value": null
+       },
+       {
+        "color": "green",
+        "value": 1
+       }
+      ]
+     },
+     "custom": {
+      "fillOpacity": 80,
+      "lineWidth": 0
+     }
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "prod"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "운영 API (/readyz)"
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "dev"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "개발 API (/readyz)"
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "dev-fe"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "개발 웹 FE (/healthz)"
+       }
+      ]
+     }
+    ]
+   },
+   "options": {
+    "showValue": "never",
+    "mergeValues": true,
+    "alignValue": "center",
+    "rowHeight": 0.8,
+    "legend": {
+     "showLegend": false
+    },
+    "tooltip": {
+     "mode": "single"
+    }
+   },
+   "description": "빨간 구간이 접속 실패입니다."
+  },
+  {
+   "type": "timeseries",
+   "title": "응답 시간",
+   "id": 29,
+   "gridPos": {
+    "x": 12,
+    "y": 41,
+    "w": 12,
+    "h": 6
    },
    "datasource": {
     "type": "prometheus",
@@ -857,32 +2092,782 @@
    ],
    "fieldConfig": {
     "defaults": {
+     "custom": {
+      "drawStyle": "line",
+      "lineWidth": 2,
+      "fillOpacity": 8,
+      "gradientMode": "opacity",
+      "showPoints": "never",
+      "spanNulls": false,
+      "axisSoftMin": 0
+     },
      "unit": "s"
     },
-    "overrides": []
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "prod"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "운영 API (/readyz)"
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "dev"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "개발 API (/readyz)"
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "dev-fe"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "개발 웹 FE (/healthz)"
+       }
+      ]
+     }
+    ]
    },
-   "options": {}
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom",
+     "showLegend": true,
+     "calcs": []
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "description": "DNS·TLS·응답까지 포함한 전체 시간. 서버가 춘천이라 해외에서는 더 느릴 수 있습니다."
+  },
+  {
+   "type": "stat",
+   "title": "HTTP 상태 코드",
+   "id": 30,
+   "gridPos": {
+    "x": 0,
+    "y": 47,
+    "w": 12,
+    "h": 4
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prom"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "probe_http_status_code",
+     "legendFormat": "{{target}}"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "red",
+        "value": null
+       },
+       {
+        "color": "green",
+        "value": 200
+       },
+       {
+        "color": "orange",
+        "value": 300
+       }
+      ]
+     }
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "prod"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "운영 API (/readyz)"
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "dev"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "개발 API (/readyz)"
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "dev-fe"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "개발 웹 FE (/healthz)"
+       }
+      ]
+     }
+    ]
+   },
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "colorMode": "value",
+    "graphMode": "none",
+    "textMode": "value_and_name",
+    "justifyMode": "center",
+    "orientation": "auto",
+    "wideLayout": true,
+    "showPercentChange": false
+   }
+  },
+  {
+   "type": "stat",
+   "title": "인증서 남은 기간",
+   "id": 31,
+   "gridPos": {
+    "x": 12,
+    "y": 47,
+    "w": 12,
+    "h": 4
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prom"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "(probe_ssl_earliest_cert_expiry - time()) / 86400",
+     "legendFormat": "{{target}}"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "red",
+        "value": null
+       },
+       {
+        "color": "orange",
+        "value": 14
+       },
+       {
+        "color": "green",
+        "value": 30
+       }
+      ]
+     },
+     "unit": "suffix:일",
+     "decimals": 0
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "prod"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "운영 API (/readyz)"
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "dev"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "개발 API (/readyz)"
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "dev-fe"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "개발 웹 FE (/healthz)"
+       }
+      ]
+     }
+    ]
+   },
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "colorMode": "background",
+    "graphMode": "none",
+    "textMode": "value_and_name",
+    "justifyMode": "center",
+    "orientation": "auto",
+    "wideLayout": true,
+    "showPercentChange": false
+   }
   },
   {
    "type": "row",
-   "title": "관측 도구",
-   "id": 21,
+   "title": "Redis (운영 DB 서버·개발 서버)",
+   "id": 32,
    "collapsed": false,
    "gridPos": {
     "x": 0,
-    "y": 34,
+    "y": 51,
     "w": 24,
     "h": 1
    },
    "panels": []
   },
   {
-   "type": "timeseries",
-   "title": "Prometheus 시계열 수",
-   "id": 22,
+   "type": "stat",
+   "title": "연결 상태",
+   "id": 33,
    "gridPos": {
     "x": 0,
-    "y": 35,
+    "y": 52,
+    "w": 4,
+    "h": 4
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prom"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "redis_up{job=\"integrations/redis\"}",
+     "legendFormat": "{{host}}"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "mappings": [
+      {
+       "type": "value",
+       "options": {
+        "0": {
+         "text": "끊김",
+         "color": "red",
+         "index": 0
+        },
+        "1": {
+         "text": "정상",
+         "color": "green",
+         "index": 1
+        }
+       }
+      }
+     ],
+     "color": {
+      "mode": "thresholds"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "red",
+        "value": null
+       },
+       {
+        "color": "green",
+        "value": 1
+       }
+      ]
+     }
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "prod-app"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "운영 앱 서버"
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "prod-data"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "운영 DB 서버"
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "dev"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "개발·모니터링 서버"
+       }
+      ]
+     }
+    ]
+   },
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "colorMode": "background",
+    "graphMode": "none",
+    "textMode": "value_and_name",
+    "justifyMode": "center",
+    "orientation": "auto",
+    "wideLayout": true,
+    "showPercentChange": false
+   },
+   "description": "관측 전용 제한 계정으로 접속해 확인합니다(앱 비밀번호를 쓰지 않음)."
+  },
+  {
+   "type": "stat",
+   "title": "메모리 사용률(상한 대비)",
+   "id": 34,
+   "gridPos": {
+    "x": 4,
+    "y": 52,
+    "w": 5,
+    "h": 4
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prom"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "100 * redis_memory_used_bytes{job=\"integrations/redis\"} / (redis_memory_max_bytes{job=\"integrations/redis\"} > 0)",
+     "legendFormat": "{{host}}"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "orange",
+        "value": 70
+       },
+       {
+        "color": "red",
+        "value": 80
+       }
+      ]
+     },
+     "unit": "percent",
+     "decimals": 1
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "prod-app"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "운영 앱 서버"
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "prod-data"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "운영 DB 서버"
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "dev"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "개발·모니터링 서버"
+       }
+      ]
+     }
+    ]
+   },
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "colorMode": "background",
+    "graphMode": "none",
+    "textMode": "value_and_name",
+    "justifyMode": "center",
+    "orientation": "auto",
+    "wideLayout": true,
+    "showPercentChange": false
+   },
+   "description": "상한(maxmemory): 운영 384MiB, 개발 96MiB. 80%를 넘으면 경보가 울립니다. 지금 축출 정책은 캐시용(allkeys-lru)이라 꽉 차면 오래 안 쓴 키부터 지워집니다."
+  },
+  {
+   "type": "stat",
+   "title": "저장된 키",
+   "id": 35,
+   "gridPos": {
+    "x": 9,
+    "y": 52,
+    "w": 5,
+    "h": 4
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prom"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "sum by(host) (redis_db_keys{job=\"integrations/redis\"}) or on(host) (0 * redis_up{job=\"integrations/redis\"})",
+     "legendFormat": "{{host}}"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {},
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "prod-app"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "운영 앱 서버"
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "prod-data"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "운영 DB 서버"
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "dev"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "개발·모니터링 서버"
+       }
+      ]
+     }
+    ]
+   },
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "colorMode": "none",
+    "graphMode": "none",
+    "textMode": "value_and_name",
+    "justifyMode": "center",
+    "orientation": "auto",
+    "wideLayout": true,
+    "showPercentChange": false
+   }
+  },
+  {
+   "type": "stat",
+   "title": "접속 클라이언트",
+   "id": 36,
+   "gridPos": {
+    "x": 14,
+    "y": 52,
+    "w": 5,
+    "h": 4
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prom"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "redis_connected_clients{job=\"integrations/redis\"}",
+     "legendFormat": "{{host}}"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {},
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "prod-app"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "운영 앱 서버"
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "prod-data"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "운영 DB 서버"
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "dev"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "개발·모니터링 서버"
+       }
+      ]
+     }
+    ]
+   },
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "colorMode": "none",
+    "graphMode": "none",
+    "textMode": "value_and_name",
+    "justifyMode": "center",
+    "orientation": "auto",
+    "wideLayout": true,
+    "showPercentChange": false
+   },
+   "description": "관측 계정 1개를 포함합니다."
+  },
+  {
+   "type": "stat",
+   "title": "축출된 키(24시간)",
+   "id": 37,
+   "gridPos": {
+    "x": 19,
+    "y": 52,
+    "w": 5,
+    "h": 4
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prom"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "increase(redis_evicted_keys_total{job=\"integrations/redis\"}[24h])",
+     "legendFormat": "{{host}}"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "orange",
+        "value": 1
+       }
+      ]
+     },
+     "decimals": 0
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "prod-app"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "운영 앱 서버"
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "prod-data"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "운영 DB 서버"
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "dev"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "개발·모니터링 서버"
+       }
+      ]
+     }
+    ]
+   },
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "colorMode": "background",
+    "graphMode": "none",
+    "textMode": "value_and_name",
+    "justifyMode": "center",
+    "orientation": "auto",
+    "wideLayout": true,
+    "showPercentChange": false
+   },
+   "description": "메모리가 꽉 차서 지워진 키. 0이 아니면 인증·잠금 키가 지워졌을 수 있으니 바로 확인합니다."
+  },
+  {
+   "type": "timeseries",
+   "title": "메모리 사용량·상한",
+   "id": 38,
+   "gridPos": {
+    "x": 0,
+    "y": 56,
     "w": 8,
     "h": 8
    },
@@ -897,25 +2882,54 @@
       "type": "prometheus",
       "uid": "prom"
      },
-     "expr": "prometheus_tsdb_head_series",
-     "legendFormat": "series"
+     "expr": "redis_memory_used_bytes{job=\"integrations/redis\"}",
+     "legendFormat": "{{host}} 사용"
+    },
+    {
+     "refId": "B",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "redis_memory_max_bytes{job=\"integrations/redis\"}",
+     "legendFormat": "{{host}} 상한"
     }
    ],
    "fieldConfig": {
     "defaults": {
-     "unit": "short"
+     "custom": {
+      "drawStyle": "line",
+      "lineWidth": 2,
+      "fillOpacity": 8,
+      "gradientMode": "opacity",
+      "showPoints": "never",
+      "spanNulls": false,
+      "axisSoftMin": 0
+     },
+     "unit": "bytes"
     },
     "overrides": []
    },
-   "options": {}
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom",
+     "showLegend": true,
+     "calcs": []
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   }
   },
   {
    "type": "timeseries",
-   "title": "Alloy 메트릭 전송 실패",
-   "id": 23,
+   "title": "초당 명령 수",
+   "id": 39,
    "gridPos": {
     "x": 8,
-    "y": 35,
+    "y": 56,
     "w": 8,
     "h": 8
    },
@@ -930,25 +2944,86 @@
       "type": "prometheus",
       "uid": "prom"
      },
-     "expr": "sum by(host) (rate(prometheus_remote_storage_samples_failed_total[5m]))",
+     "expr": "rate(redis_commands_processed_total{job=\"integrations/redis\"}[5m])",
      "legendFormat": "{{host}}"
     }
    ],
    "fieldConfig": {
     "defaults": {
-     "unit": "short"
+     "custom": {
+      "drawStyle": "line",
+      "lineWidth": 2,
+      "fillOpacity": 8,
+      "gradientMode": "opacity",
+      "showPoints": "never",
+      "spanNulls": false,
+      "axisSoftMin": 0
+     },
+     "unit": "ops"
     },
-    "overrides": []
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "prod-app"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "운영 앱 서버"
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "prod-data"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "운영 DB 서버"
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "dev"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "개발·모니터링 서버"
+       }
+      ]
+     }
+    ]
    },
-   "options": {}
+   "options": {
+    "legend": {
+     "displayMode": "table",
+     "placement": "bottom",
+     "showLegend": true,
+     "calcs": [
+      "lastNotNull",
+      "max"
+     ]
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "description": "지금은 관측 계정의 조회가 대부분입니다."
   },
   {
    "type": "timeseries",
-   "title": "Alloy 로그 전송 실패",
-   "id": 24,
+   "title": "만료·축출 키(5분)",
+   "id": 40,
    "gridPos": {
     "x": 16,
-    "y": 35,
+    "y": 56,
     "w": 8,
     "h": 8
    },
@@ -963,17 +3038,508 @@
       "type": "prometheus",
       "uid": "prom"
      },
-     "expr": "sum by(host) (rate(loki_write_dropped_entries_total[5m]))",
-     "legendFormat": "{{host}}"
+     "expr": "increase(redis_expired_keys_total{job=\"integrations/redis\"}[5m])",
+     "legendFormat": "{{host}} 만료"
+    },
+    {
+     "refId": "B",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "increase(redis_evicted_keys_total{job=\"integrations/redis\"}[5m])",
+     "legendFormat": "{{host}} 축출"
     }
    ],
    "fieldConfig": {
     "defaults": {
+     "custom": {
+      "drawStyle": "line",
+      "lineWidth": 2,
+      "fillOpacity": 8,
+      "gradientMode": "opacity",
+      "showPoints": "never",
+      "spanNulls": false,
+      "axisSoftMin": 0
+     },
      "unit": "short"
     },
     "overrides": []
    },
-   "options": {}
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom",
+     "showLegend": true,
+     "calcs": []
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   }
+  },
+  {
+   "type": "row",
+   "title": "관측 도구 자체",
+   "id": 41,
+   "collapsed": true,
+   "gridPos": {
+    "x": 0,
+    "y": 64,
+    "w": 24,
+    "h": 1
+   },
+   "panels": [
+    {
+     "type": "stat",
+     "title": "관측 구성요소",
+     "id": 42,
+     "gridPos": {
+      "x": 0,
+      "y": 65,
+      "w": 6,
+      "h": 4
+     },
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "targets": [
+      {
+       "refId": "A",
+       "datasource": {
+        "type": "prometheus",
+        "uid": "prom"
+       },
+       "expr": "up{job=\"obs\"}",
+       "legendFormat": "{{component}}"
+      }
+     ],
+     "fieldConfig": {
+      "defaults": {
+       "mappings": [
+        {
+         "type": "value",
+         "options": {
+          "0": {
+           "text": "끊김",
+           "color": "red",
+           "index": 0
+          },
+          "1": {
+           "text": "정상",
+           "color": "green",
+           "index": 1
+          }
+         }
+        }
+       ],
+       "color": {
+        "mode": "thresholds"
+       },
+       "thresholds": {
+        "mode": "absolute",
+        "steps": [
+         {
+          "color": "red",
+          "value": null
+         },
+         {
+          "color": "green",
+          "value": 1
+         }
+        ]
+       }
+      },
+      "overrides": []
+     },
+     "options": {
+      "reduceOptions": {
+       "calcs": [
+        "lastNotNull"
+       ],
+       "fields": "",
+       "values": false
+      },
+      "colorMode": "background",
+      "graphMode": "none",
+      "textMode": "value_and_name",
+      "justifyMode": "center",
+      "orientation": "auto",
+      "wideLayout": true,
+      "showPercentChange": false
+     }
+    },
+    {
+     "type": "stat",
+     "title": "Prometheus 저장 용량",
+     "id": 43,
+     "gridPos": {
+      "x": 6,
+      "y": 65,
+      "w": 6,
+      "h": 4
+     },
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "targets": [
+      {
+       "refId": "A",
+       "datasource": {
+        "type": "prometheus",
+        "uid": "prom"
+       },
+       "expr": "prometheus_tsdb_storage_blocks_bytes",
+       "legendFormat": "디스크 블록"
+      }
+     ],
+     "fieldConfig": {
+      "defaults": {
+       "unit": "bytes"
+      },
+      "overrides": []
+     },
+     "options": {
+      "reduceOptions": {
+       "calcs": [
+        "lastNotNull"
+       ],
+       "fields": "",
+       "values": false
+      },
+      "colorMode": "none",
+      "graphMode": "none",
+      "textMode": "value_and_name",
+      "justifyMode": "center",
+      "orientation": "auto",
+      "wideLayout": true,
+      "showPercentChange": false
+     },
+     "description": "보존 14일·최대 8GiB 중 먼저 닿는 한도까지 남깁니다."
+    },
+    {
+     "type": "stat",
+     "title": "Prometheus 시계열 수",
+     "id": 44,
+     "gridPos": {
+      "x": 12,
+      "y": 65,
+      "w": 6,
+      "h": 4
+     },
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "targets": [
+      {
+       "refId": "A",
+       "datasource": {
+        "type": "prometheus",
+        "uid": "prom"
+       },
+       "expr": "prometheus_tsdb_head_series",
+       "legendFormat": "현재"
+      }
+     ],
+     "fieldConfig": {
+      "defaults": {},
+      "overrides": []
+     },
+     "options": {
+      "reduceOptions": {
+       "calcs": [
+        "lastNotNull"
+       ],
+       "fields": "",
+       "values": false
+      },
+      "colorMode": "none",
+      "graphMode": "none",
+      "textMode": "value_and_name",
+      "justifyMode": "center",
+      "orientation": "auto",
+      "wideLayout": true,
+      "showPercentChange": false
+     }
+    },
+    {
+     "type": "stat",
+     "title": "수집기 메모리(Alloy)",
+     "id": 45,
+     "gridPos": {
+      "x": 18,
+      "y": 65,
+      "w": 6,
+      "h": 4
+     },
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "targets": [
+      {
+       "refId": "A",
+       "datasource": {
+        "type": "prometheus",
+        "uid": "prom"
+       },
+       "expr": "process_resident_memory_bytes{job=\"integrations/self\"}",
+       "legendFormat": "{{host}}"
+      }
+     ],
+     "fieldConfig": {
+      "defaults": {
+       "unit": "bytes"
+      },
+      "overrides": [
+       {
+        "matcher": {
+         "id": "byName",
+         "options": "prod-app"
+        },
+        "properties": [
+         {
+          "id": "displayName",
+          "value": "운영 앱 서버"
+         }
+        ]
+       },
+       {
+        "matcher": {
+         "id": "byName",
+         "options": "prod-data"
+        },
+        "properties": [
+         {
+          "id": "displayName",
+          "value": "운영 DB 서버"
+         }
+        ]
+       },
+       {
+        "matcher": {
+         "id": "byName",
+         "options": "dev"
+        },
+        "properties": [
+         {
+          "id": "displayName",
+          "value": "개발·모니터링 서버"
+         }
+        ]
+       }
+      ]
+     },
+     "options": {
+      "reduceOptions": {
+       "calcs": [
+        "lastNotNull"
+       ],
+       "fields": "",
+       "values": false
+      },
+      "colorMode": "none",
+      "graphMode": "none",
+      "textMode": "value_and_name",
+      "justifyMode": "center",
+      "orientation": "auto",
+      "wideLayout": true,
+      "showPercentChange": false
+     }
+    },
+    {
+     "type": "timeseries",
+     "title": "메트릭 전송 실패(Alloy → Prometheus)",
+     "id": 46,
+     "gridPos": {
+      "x": 0,
+      "y": 69,
+      "w": 12,
+      "h": 8
+     },
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "targets": [
+      {
+       "refId": "A",
+       "datasource": {
+        "type": "prometheus",
+        "uid": "prom"
+       },
+       "expr": "sum by(host) (rate(prometheus_remote_storage_samples_failed_total[5m]))",
+       "legendFormat": "{{host}}"
+      }
+     ],
+     "fieldConfig": {
+      "defaults": {
+       "custom": {
+        "drawStyle": "line",
+        "lineWidth": 2,
+        "fillOpacity": 8,
+        "gradientMode": "opacity",
+        "showPoints": "never",
+        "spanNulls": false,
+        "axisSoftMin": 0
+       },
+       "unit": "short"
+      },
+      "overrides": [
+       {
+        "matcher": {
+         "id": "byName",
+         "options": "prod-app"
+        },
+        "properties": [
+         {
+          "id": "displayName",
+          "value": "운영 앱 서버"
+         }
+        ]
+       },
+       {
+        "matcher": {
+         "id": "byName",
+         "options": "prod-data"
+        },
+        "properties": [
+         {
+          "id": "displayName",
+          "value": "운영 DB 서버"
+         }
+        ]
+       },
+       {
+        "matcher": {
+         "id": "byName",
+         "options": "dev"
+        },
+        "properties": [
+         {
+          "id": "displayName",
+          "value": "개발·모니터링 서버"
+         }
+        ]
+       }
+      ]
+     },
+     "options": {
+      "legend": {
+       "displayMode": "table",
+       "placement": "bottom",
+       "showLegend": true,
+       "calcs": [
+        "lastNotNull",
+        "max"
+       ]
+      },
+      "tooltip": {
+       "mode": "multi",
+       "sort": "desc"
+      }
+     },
+     "description": "0이 정상입니다."
+    },
+    {
+     "type": "timeseries",
+     "title": "로그 전송 폐기(Alloy → Loki)",
+     "id": 47,
+     "gridPos": {
+      "x": 12,
+      "y": 69,
+      "w": 12,
+      "h": 8
+     },
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "targets": [
+      {
+       "refId": "A",
+       "datasource": {
+        "type": "prometheus",
+        "uid": "prom"
+       },
+       "expr": "sum by(host) (rate(loki_write_dropped_entries_total[5m]))",
+       "legendFormat": "{{host}}"
+      }
+     ],
+     "fieldConfig": {
+      "defaults": {
+       "custom": {
+        "drawStyle": "line",
+        "lineWidth": 2,
+        "fillOpacity": 8,
+        "gradientMode": "opacity",
+        "showPoints": "never",
+        "spanNulls": false,
+        "axisSoftMin": 0
+       },
+       "unit": "short"
+      },
+      "overrides": [
+       {
+        "matcher": {
+         "id": "byName",
+         "options": "prod-app"
+        },
+        "properties": [
+         {
+          "id": "displayName",
+          "value": "운영 앱 서버"
+         }
+        ]
+       },
+       {
+        "matcher": {
+         "id": "byName",
+         "options": "prod-data"
+        },
+        "properties": [
+         {
+          "id": "displayName",
+          "value": "운영 DB 서버"
+         }
+        ]
+       },
+       {
+        "matcher": {
+         "id": "byName",
+         "options": "dev"
+        },
+        "properties": [
+         {
+          "id": "displayName",
+          "value": "개발·모니터링 서버"
+         }
+        ]
+       }
+      ]
+     },
+     "options": {
+      "legend": {
+       "displayMode": "table",
+       "placement": "bottom",
+       "showLegend": true,
+       "calcs": [
+        "lastNotNull",
+        "max"
+       ]
+      },
+      "tooltip": {
+       "mode": "multi",
+       "sort": "desc"
+      }
+     },
+     "description": "0이 정상입니다."
+    }
+   ]
   }
  ]
 }

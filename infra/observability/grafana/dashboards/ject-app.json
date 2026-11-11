@@ -10,15 +10,48 @@
  "version": 1,
  "editable": false,
  "refresh": "1m",
+ "graphTooltip": 1,
+ "liveNow": false,
  "time": {
   "from": "now-6h",
   "to": "now"
  },
+ "timepicker": {
+  "refresh_intervals": [
+   "30s",
+   "1m",
+   "5m",
+   "15m"
+  ]
+ },
+ "links": [
+  {
+   "title": "JECT 대시보드",
+   "type": "dashboards",
+   "tags": [
+    "ject"
+   ],
+   "asDropdown": true,
+   "includeVars": false,
+   "keepTime": true,
+   "targetBlank": false,
+   "icon": "external link"
+  },
+  {
+   "title": "추적 검색(Tempo·개발)",
+   "type": "link",
+   "url": "/explore?schemaVersion=1&panes=%7B%22t%22:%7B%22datasource%22:%22ject-tempo-dev%22,%22queries%22:%5B%7B%22refId%22:%22A%22,%22datasource%22:%7B%22type%22:%22tempo%22,%22uid%22:%22ject-tempo-dev%22%7D,%22queryType%22:%22traceqlSearch%22,%22limit%22:20%7D%5D,%22range%22:%7B%22from%22:%22now-1h%22,%22to%22:%22now%22%7D%7D%7D",
+   "icon": "info",
+   "keepTime": false,
+   "targetBlank": false,
+   "tooltip": "개발 인프라의 OpenTelemetry 추적. 실제 앱 계측 연결 전에는 합성 시험 추적만 있습니다."
+  }
+ ],
  "templating": {
   "list": [
    {
     "name": "host",
-    "label": "서버",
+    "label": "앱 서버",
     "type": "query",
     "datasource": {
      "type": "prometheus",
@@ -29,6 +62,7 @@
     "refresh": 2,
     "includeAll": true,
     "multi": true,
+    "sort": 1,
     "allValue": ".*",
     "current": {
      "selected": true,
@@ -44,13 +78,28 @@
  },
  "panels": [
   {
-   "type": "row",
-   "title": "상태",
+   "type": "text",
+   "title": "지금 보이는 것",
    "id": 1,
-   "collapsed": false,
    "gridPos": {
     "x": 0,
     "y": 0,
+    "w": 24,
+    "h": 4
+   },
+   "options": {
+    "mode": "markdown",
+    "content": "- **웹 요청(Nginx 로그 기준)** 행은 지금도 실제 요청으로 채워집니다. 접속 시험(Blackbox)은 요청 수에서 뺐습니다.\n- 개발 BE는 실제 앱(Spring Boot)이 develop 병합 때마다 자동 배포되며, 맨 아래 **Spring Boot 지표** 행에 보입니다.\n- 운영 BE는 첫 운영 배포 전까지 **배포 시험용 앱(스모크 앱)** 입니다. 그동안 운영의 Spring Boot 지표는 비어 있는 것이 정상입니다."
+   }
+  },
+  {
+   "type": "row",
+   "title": "상태",
+   "id": 2,
+   "collapsed": false,
+   "gridPos": {
+    "x": 0,
+    "y": 4,
     "w": 24,
     "h": 1
    },
@@ -59,12 +108,12 @@
   {
    "type": "stat",
    "title": "앱 지표 수집",
-   "id": 2,
+   "id": 3,
    "gridPos": {
     "x": 0,
-    "y": 1,
+    "y": 5,
     "w": 6,
-    "h": 5
+    "h": 4
    },
    "datasource": {
     "type": "prometheus",
@@ -89,17 +138,72 @@
        "options": {
         "0": {
          "text": "끊김",
-         "color": "red"
+         "color": "red",
+         "index": 0
         },
         "1": {
          "text": "수집 성공",
-         "color": "green"
+         "color": "green",
+         "index": 1
         }
        }
       }
-     ]
+     ],
+     "color": {
+      "mode": "thresholds"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "red",
+        "value": null
+       },
+       {
+        "color": "green",
+        "value": 1
+       }
+      ]
+     }
     },
-    "overrides": []
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "prod-app"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "운영 앱 서버"
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "prod-data"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "운영 DB 서버"
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "dev"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "개발·모니터링 서버"
+       }
+      ]
+     }
+    ]
    },
    "options": {
     "reduceOptions": {
@@ -111,18 +215,22 @@
     },
     "colorMode": "background",
     "graphMode": "none",
-    "textMode": "value_and_name"
+    "textMode": "value_and_name",
+    "justifyMode": "center",
+    "orientation": "auto",
+    "wideLayout": true,
+    "showPercentChange": false
    }
   },
   {
    "type": "stat",
    "title": "앱 가동 시간",
-   "id": 3,
+   "id": 4,
    "gridPos": {
     "x": 6,
-    "y": 1,
+    "y": 5,
     "w": 6,
-    "h": 5
+    "h": 4
    },
    "datasource": {
     "type": "prometheus",
@@ -141,7 +249,582 @@
    ],
    "fieldConfig": {
     "defaults": {
+     "unit": "s",
+     "decimals": 0
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "prod-app"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "운영 앱 서버"
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "prod-data"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "운영 DB 서버"
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "dev"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "개발·모니터링 서버"
+       }
+      ]
+     }
+    ]
+   },
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "colorMode": "none",
+    "graphMode": "none",
+    "textMode": "value_and_name",
+    "justifyMode": "center",
+    "orientation": "auto",
+    "wideLayout": true,
+    "showPercentChange": false
+   },
+   "description": "마지막 배포·재시작 후 경과 시간."
+  },
+  {
+   "type": "table",
+   "title": "실행 중인 앱 버전",
+   "id": 5,
+   "gridPos": {
+    "x": 12,
+    "y": 5,
+    "w": 12,
+    "h": 4
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prom"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "max by(host, version) (ject_smoke_info{host=~\"$host\"})",
+     "format": "table",
+     "instant": true
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "custom": {
+      "align": "left"
+     }
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "Time"
+      },
+      "properties": [
+       {
+        "id": "custom.hidden",
+        "value": true
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "Value"
+      },
+      "properties": [
+       {
+        "id": "custom.hidden",
+        "value": true
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "host"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "서버"
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "version"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "커밋"
+       }
+      ]
+     }
+    ]
+   },
+   "options": {
+    "showHeader": true,
+    "cellHeight": "sm"
+   },
+   "description": "스모크 앱의 빌드 커밋만 보입니다. 실제 BE의 버전은 배포 기록(ject-deploy status)으로 확인합니다."
+  },
+  {
+   "type": "row",
+   "title": "웹 요청 (Nginx 접근 로그 기준)",
+   "id": 6,
+   "collapsed": false,
+   "gridPos": {
+    "x": 0,
+    "y": 9,
+    "w": 24,
+    "h": 1
+   },
+   "panels": []
+  },
+  {
+   "type": "timeseries",
+   "title": "요청 수(상태별)",
+   "id": 7,
+   "gridPos": {
+    "x": 0,
+    "y": 10,
+    "w": 12,
+    "h": 8
+   },
+   "datasource": {
+    "type": "loki",
+    "uid": "loki"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "loki",
+      "uid": "loki"
+     },
+     "expr": "sum by(host) (count_over_time({service=\"nginx\", host=~\"$host\"} | json status=\"status\", ua=\"ua\" | __error__=\"\" | ua !~ \"Blackbox Exporter.*\" | status < 400 [$__auto]))",
+     "legendFormat": "{{host}} 정상(2xx·3xx)"
+    },
+    {
+     "refId": "B",
+     "datasource": {
+      "type": "loki",
+      "uid": "loki"
+     },
+     "expr": "sum by(host) (count_over_time({service=\"nginx\", host=~\"$host\"} | json status=\"status\", ua=\"ua\" | __error__=\"\" | ua !~ \"Blackbox Exporter.*\" | status >= 400, status < 500 [$__auto]))",
+     "legendFormat": "{{host}} 4xx"
+    },
+    {
+     "refId": "C",
+     "datasource": {
+      "type": "loki",
+      "uid": "loki"
+     },
+     "expr": "sum by(host) (count_over_time({service=\"nginx\", host=~\"$host\"} | json status=\"status\", ua=\"ua\" | __error__=\"\" | ua !~ \"Blackbox Exporter.*\" | status >= 500 [$__auto]))",
+     "legendFormat": "{{host}} 5xx"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "custom": {
+      "drawStyle": "bars",
+      "lineWidth": 1,
+      "fillOpacity": 70,
+      "showPoints": "never",
+      "stacking": {
+       "mode": "normal",
+       "group": "A"
+      },
+      "axisSoftMin": 0
+     },
+     "unit": "short"
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": ".*5xx"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "red"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": ".*4xx"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "orange"
+        }
+       }
+      ]
+     }
+    ]
+   },
+   "options": {
+    "legend": {
+     "displayMode": "table",
+     "placement": "bottom",
+     "showLegend": true,
+     "calcs": [
+      "lastNotNull",
+      "max"
+     ]
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "description": "운영 앱 서버의 Nginx는 공개 입구라 개발 주소로 들어온 요청도 한 번 지나갑니다(개발 서버 게이트웨이에서 한 번 더 기록). 4xx에는 알 수 없는 주소로 들어온 자동 스캔을 끊은 444가 포함됩니다."
+  },
+  {
+   "type": "timeseries",
+   "title": "응답 시간 p95(상태 확인 경로 제외)",
+   "id": 8,
+   "gridPos": {
+    "x": 12,
+    "y": 10,
+    "w": 12,
+    "h": 8
+   },
+   "datasource": {
+    "type": "loki",
+    "uid": "loki"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "loki",
+      "uid": "loki"
+     },
+     "expr": "quantile_over_time(0.95, {service=\"nginx\", host=~\"$host\"} | json rt=\"request_time\", path=\"path\", ua=\"ua\" | __error__=\"\" | ua !~ \"Blackbox Exporter.*\" | path !~ \"/readyz|/healthz|/nginx-health\" | rt != \"\" | unwrap rt [$__auto]) by (host)",
+     "legendFormat": "{{host}}"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "custom": {
+      "drawStyle": "points",
+      "pointSize": 6,
+      "showPoints": "always",
+      "axisSoftMin": 0,
+      "thresholdsStyle": {
+       "mode": "dashed"
+      }
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "transparent",
+        "value": null
+       },
+       {
+        "color": "red",
+        "value": 1
+       }
+      ]
+     },
      "unit": "s"
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "table",
+     "placement": "bottom",
+     "showLegend": true,
+     "calcs": [
+      "lastNotNull",
+      "max"
+     ]
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "description": "Nginx가 응답을 끝내기까지 걸린 시간의 95번째 값. 1초 기준선을 함께 그립니다."
+  },
+  {
+   "type": "timeseries",
+   "title": "5xx 비율",
+   "id": 9,
+   "gridPos": {
+    "x": 0,
+    "y": 18,
+    "w": 12,
+    "h": 8
+   },
+   "datasource": {
+    "type": "loki",
+    "uid": "loki"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "loki",
+      "uid": "loki"
+     },
+     "expr": "(sum by(host) (count_over_time({service=\"nginx\", host=~\"$host\"} | json status=\"status\", ua=\"ua\" | __error__=\"\" | ua !~ \"Blackbox Exporter.*\" | status >= 500 [$__auto])) / sum by(host) (count_over_time({service=\"nginx\", host=~\"$host\"} | json ua=\"ua\" | __error__=\"\" | ua !~ \"Blackbox Exporter.*\" [$__auto])))",
+     "legendFormat": "{{host}}"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "custom": {
+      "drawStyle": "points",
+      "pointSize": 6,
+      "showPoints": "always",
+      "axisSoftMin": 0,
+      "thresholdsStyle": {
+       "mode": "dashed"
+      }
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "transparent",
+        "value": null
+       },
+       {
+        "color": "red",
+        "value": 0.05
+       }
+      ]
+     },
+     "unit": "percentunit",
+     "max": 1
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "table",
+     "placement": "bottom",
+     "showLegend": true,
+     "calcs": [
+      "lastNotNull",
+      "max"
+     ]
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "description": "요청이 없을 때는 비어 있습니다(0이 아님)."
+  },
+  {
+   "type": "table",
+   "title": "많이 들어온 경로(선택한 기간)",
+   "id": 10,
+   "gridPos": {
+    "x": 12,
+    "y": 18,
+    "w": 12,
+    "h": 8
+   },
+   "datasource": {
+    "type": "loki",
+    "uid": "loki"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "loki",
+      "uid": "loki"
+     },
+     "expr": "topk(15, sum by(path, status) (count_over_time({service=\"nginx\", host=~\"$host\"} | json path=\"path\", status=\"status\", ua=\"ua\" | __error__=\"\" | ua !~ \"Blackbox Exporter.*\" [$__range])))",
+     "format": "table",
+     "instant": true,
+     "queryType": "instant"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {},
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "Time"
+      },
+      "properties": [
+       {
+        "id": "custom.hidden",
+        "value": true
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "Value #A"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "요청 수"
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "path"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "경로"
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "status"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "상태"
+       }
+      ]
+     }
+    ]
+   },
+   "options": {
+    "showHeader": true,
+    "cellHeight": "sm",
+    "sortBy": [
+     {
+      "displayName": "요청 수",
+      "desc": true
+     }
+    ]
+   },
+   "description": "모르는 경로(/.env 등)가 많으면 자동 스캔입니다. 운영 Nginx가 막고 있는지 상태 코드로 확인합니다."
+  },
+  {
+   "type": "row",
+   "title": "웹 FE (개발)",
+   "id": 11,
+   "collapsed": false,
+   "gridPos": {
+    "x": 0,
+    "y": 26,
+    "w": 24,
+    "h": 1
+   },
+   "panels": []
+  },
+  {
+   "type": "stat",
+   "title": "FE 접속 시험(개발 웹 /healthz)",
+   "id": 12,
+   "gridPos": {
+    "x": 0,
+    "y": 27,
+    "w": 6,
+    "h": 5
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prom"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "probe_success{job=\"integrations/blackbox/dev-fe\"}",
+     "legendFormat": "개발 웹 /healthz"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "mappings": [
+      {
+       "type": "value",
+       "options": {
+        "0": {
+         "text": "실패",
+         "color": "red",
+         "index": 0
+        },
+        "1": {
+         "text": "성공",
+         "color": "green",
+         "index": 1
+        }
+       }
+      }
+     ],
+     "color": {
+      "mode": "thresholds"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "red",
+        "value": null
+       },
+       {
+        "color": "green",
+        "value": 1
+       }
+      ]
+     }
     },
     "overrides": []
    },
@@ -155,18 +838,145 @@
     },
     "colorMode": "background",
     "graphMode": "none",
-    "textMode": "value_and_name"
+    "textMode": "value",
+    "justifyMode": "center",
+    "orientation": "auto",
+    "wideLayout": true,
+    "showPercentChange": false
+   },
+   "description": "FE 컨테이너 생존 확인입니다. BE /readyz 성공과 별개이며 업무 E2E를 대신하지 않습니다."
+  },
+  {
+   "type": "timeseries",
+   "title": "FE 응답 시간",
+   "id": 13,
+   "gridPos": {
+    "x": 6,
+    "y": 27,
+    "w": 9,
+    "h": 5
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prom"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "probe_duration_seconds{job=\"integrations/blackbox/dev-fe\"}",
+     "legendFormat": "개발 웹"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "custom": {
+      "drawStyle": "line",
+      "lineWidth": 2,
+      "fillOpacity": 8,
+      "gradientMode": "opacity",
+      "showPoints": "never",
+      "spanNulls": false,
+      "axisSoftMin": 0
+     },
+     "unit": "s"
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom",
+     "showLegend": false,
+     "calcs": []
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
    }
   },
   {
    "type": "timeseries",
-   "title": "스모크 앱 요청(실제 앱이 오면 비어 있음)",
-   "id": 4,
+   "title": "FE 로그 줄 수",
+   "id": 14,
    "gridPos": {
-    "x": 12,
-    "y": 1,
-    "w": 12,
+    "x": 15,
+    "y": 27,
+    "w": 9,
     "h": 5
+   },
+   "datasource": {
+    "type": "loki",
+    "uid": "loki"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "loki",
+      "uid": "loki"
+     },
+     "expr": "sum by(host) (count_over_time({service=\"fe\"} [$__auto]))",
+     "legendFormat": "{{host}}"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "custom": {
+      "drawStyle": "bars",
+      "lineWidth": 1,
+      "fillOpacity": 70,
+      "showPoints": "never",
+      "stacking": {
+       "mode": "normal",
+       "group": "A"
+      },
+      "axisSoftMin": 0
+     },
+     "unit": "short"
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom",
+     "showLegend": false,
+     "calcs": []
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "description": "운영 FE는 아직 배포 전이라 개발 서버만 보입니다."
+  },
+  {
+   "type": "row",
+   "title": "배포 시험용 앱(스모크 앱, 운영)",
+   "id": 15,
+   "collapsed": false,
+   "gridPos": {
+    "x": 0,
+    "y": 32,
+    "w": 24,
+    "h": 1
+   },
+   "panels": []
+  },
+  {
+   "type": "timeseries",
+   "title": "스모크 앱 요청",
+   "id": 16,
+   "gridPos": {
+    "x": 0,
+    "y": 33,
+    "w": 24,
+    "h": 8
    },
    "datasource": {
     "type": "prometheus",
@@ -185,20 +995,43 @@
    ],
    "fieldConfig": {
     "defaults": {
+     "custom": {
+      "drawStyle": "line",
+      "lineWidth": 2,
+      "fillOpacity": 8,
+      "gradientMode": "opacity",
+      "showPoints": "never",
+      "spanNulls": false,
+      "axisSoftMin": 0
+     },
      "unit": "reqps"
     },
     "overrides": []
    },
-   "options": {}
+   "options": {
+    "legend": {
+     "displayMode": "table",
+     "placement": "right",
+     "showLegend": true,
+     "calcs": [
+      "lastNotNull"
+     ]
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "description": "운영에 실제 BE가 배포되면 이 지표는 사라지고 아래 Spring Boot 지표로 바뀝니다."
   },
   {
    "type": "row",
-   "title": "HTTP (Spring Boot Micrometer)",
-   "id": 5,
+   "title": "Spring Boot 지표",
+   "id": 17,
    "collapsed": false,
    "gridPos": {
     "x": 0,
-    "y": 6,
+    "y": 41,
     "w": 24,
     "h": 1
    },
@@ -207,10 +1040,10 @@
   {
    "type": "timeseries",
    "title": "요청 수",
-   "id": 6,
+   "id": 18,
    "gridPos": {
     "x": 0,
-    "y": 7,
+    "y": 42,
     "w": 8,
     "h": 8
    },
@@ -231,19 +1064,79 @@
    ],
    "fieldConfig": {
     "defaults": {
+     "custom": {
+      "drawStyle": "line",
+      "lineWidth": 2,
+      "fillOpacity": 8,
+      "gradientMode": "opacity",
+      "showPoints": "never",
+      "spanNulls": false,
+      "axisSoftMin": 0
+     },
      "unit": "reqps"
     },
-    "overrides": []
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "prod-app"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "운영 앱 서버"
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "prod-data"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "운영 DB 서버"
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "dev"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "개발·모니터링 서버"
+       }
+      ]
+     }
+    ]
    },
-   "options": {}
+   "options": {
+    "legend": {
+     "displayMode": "table",
+     "placement": "bottom",
+     "showLegend": true,
+     "calcs": [
+      "lastNotNull",
+      "max"
+     ]
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   }
   },
   {
    "type": "timeseries",
    "title": "5xx 비율",
-   "id": 7,
+   "id": 19,
    "gridPos": {
     "x": 8,
-    "y": 7,
+    "y": 42,
     "w": 8,
     "h": 8
    },
@@ -264,19 +1157,95 @@
    ],
    "fieldConfig": {
     "defaults": {
+     "custom": {
+      "drawStyle": "line",
+      "lineWidth": 2,
+      "fillOpacity": 8,
+      "gradientMode": "opacity",
+      "showPoints": "never",
+      "spanNulls": false,
+      "axisSoftMin": 0,
+      "thresholdsStyle": {
+       "mode": "dashed"
+      }
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "transparent",
+        "value": null
+       },
+       {
+        "color": "red",
+        "value": 0.05
+       }
+      ]
+     },
      "unit": "percentunit"
     },
-    "overrides": []
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "prod-app"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "운영 앱 서버"
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "prod-data"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "운영 DB 서버"
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "dev"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "개발·모니터링 서버"
+       }
+      ]
+     }
+    ]
    },
-   "options": {}
+   "options": {
+    "legend": {
+     "displayMode": "table",
+     "placement": "bottom",
+     "showLegend": true,
+     "calcs": [
+      "lastNotNull",
+      "max"
+     ]
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   }
   },
   {
    "type": "timeseries",
    "title": "응답 p95",
-   "id": 8,
+   "id": 20,
    "gridPos": {
     "x": 16,
-    "y": 7,
+    "y": 42,
     "w": 8,
     "h": 8
    },
@@ -297,19 +1266,96 @@
    ],
    "fieldConfig": {
     "defaults": {
+     "custom": {
+      "drawStyle": "line",
+      "lineWidth": 2,
+      "fillOpacity": 8,
+      "gradientMode": "opacity",
+      "showPoints": "never",
+      "spanNulls": false,
+      "axisSoftMin": 0,
+      "thresholdsStyle": {
+       "mode": "dashed"
+      }
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "transparent",
+        "value": null
+       },
+       {
+        "color": "red",
+        "value": 1
+       }
+      ]
+     },
      "unit": "s"
     },
-    "overrides": []
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "prod-app"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "운영 앱 서버"
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "prod-data"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "운영 DB 서버"
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "dev"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "개발·모니터링 서버"
+       }
+      ]
+     }
+    ]
    },
-   "options": {}
+   "options": {
+    "legend": {
+     "displayMode": "table",
+     "placement": "bottom",
+     "showLegend": true,
+     "calcs": [
+      "lastNotNull",
+      "max"
+     ]
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "description": "앱이 응답 시간 구간별 지표(http.server.requests 히스토그램)를 내보내야 그려집니다. 지금 BE 설정에는 없어 비어 있습니다."
   },
   {
    "type": "table",
    "title": "경로별 요청·평균 응답(5분)",
-   "id": 9,
+   "id": 21,
    "gridPos": {
     "x": 0,
-    "y": 15,
+    "y": 50,
     "w": 24,
     "h": 8
    },
@@ -341,32 +1387,65 @@
    ],
    "fieldConfig": {
     "defaults": {},
-    "overrides": []
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "Time"
+      },
+      "properties": [
+       {
+        "id": "custom.hidden",
+        "value": true
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "Value #A"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "초당 요청"
+       },
+       {
+        "id": "unit",
+        "value": "reqps"
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "Value #B"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "평균 응답"
+       },
+       {
+        "id": "unit",
+        "value": "s"
+       }
+      ]
+     }
+    ]
    },
    "options": {
-    "showHeader": true
+    "showHeader": true,
+    "cellHeight": "sm"
    }
   },
   {
-   "type": "row",
-   "title": "JVM",
-   "id": 10,
-   "collapsed": false,
-   "gridPos": {
-    "x": 0,
-    "y": 23,
-    "w": 24,
-    "h": 1
-   },
-   "panels": []
-  },
-  {
    "type": "timeseries",
-   "title": "힙 사용",
-   "id": 11,
+   "title": "힙 메모리",
+   "id": 22,
    "gridPos": {
     "x": 0,
-    "y": 24,
+    "y": 58,
     "w": 8,
     "h": 8
    },
@@ -382,7 +1461,7 @@
       "uid": "prom"
      },
      "expr": "sum by(host) (jvm_memory_used_bytes{host=~\"$host\", area=\"heap\"})",
-     "legendFormat": "{{host}} used"
+     "legendFormat": "{{host}} 사용"
     },
     {
      "refId": "B",
@@ -391,24 +1470,47 @@
       "uid": "prom"
      },
      "expr": "sum by(host) (jvm_memory_max_bytes{host=~\"$host\", area=\"heap\"})",
-     "legendFormat": "{{host}} max"
+     "legendFormat": "{{host}} 최대"
     }
    ],
    "fieldConfig": {
     "defaults": {
+     "custom": {
+      "drawStyle": "line",
+      "lineWidth": 2,
+      "fillOpacity": 8,
+      "gradientMode": "opacity",
+      "showPoints": "never",
+      "spanNulls": false,
+      "axisSoftMin": 0
+     },
      "unit": "bytes"
     },
     "overrides": []
    },
-   "options": {}
+   "options": {
+    "legend": {
+     "displayMode": "table",
+     "placement": "bottom",
+     "showLegend": true,
+     "calcs": [
+      "lastNotNull",
+      "max"
+     ]
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   }
   },
   {
    "type": "timeseries",
    "title": "GC 정지 시간(초/초)",
-   "id": 12,
+   "id": 23,
    "gridPos": {
     "x": 8,
-    "y": 24,
+    "y": 58,
     "w": 8,
     "h": 8
    },
@@ -429,19 +1531,79 @@
    ],
    "fieldConfig": {
     "defaults": {
+     "custom": {
+      "drawStyle": "line",
+      "lineWidth": 2,
+      "fillOpacity": 8,
+      "gradientMode": "opacity",
+      "showPoints": "never",
+      "spanNulls": false,
+      "axisSoftMin": 0
+     },
      "unit": "s"
     },
-    "overrides": []
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "prod-app"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "운영 앱 서버"
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "prod-data"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "운영 DB 서버"
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "dev"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "개발·모니터링 서버"
+       }
+      ]
+     }
+    ]
    },
-   "options": {}
+   "options": {
+    "legend": {
+     "displayMode": "table",
+     "placement": "bottom",
+     "showLegend": true,
+     "calcs": [
+      "lastNotNull",
+      "max"
+     ]
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   }
   },
   {
    "type": "timeseries",
    "title": "스레드·프로세스 CPU",
-   "id": 13,
+   "id": 24,
    "gridPos": {
     "x": 16,
-    "y": 24,
+    "y": 58,
     "w": 8,
     "h": 8
    },
@@ -470,31 +1632,42 @@
     }
    ],
    "fieldConfig": {
-    "defaults": {},
+    "defaults": {
+     "custom": {
+      "drawStyle": "line",
+      "lineWidth": 2,
+      "fillOpacity": 8,
+      "gradientMode": "opacity",
+      "showPoints": "never",
+      "spanNulls": false,
+      "axisSoftMin": 0
+     }
+    },
     "overrides": []
    },
-   "options": {}
-  },
-  {
-   "type": "row",
-   "title": "DB 커넥션 풀 (HikariCP)",
-   "id": 14,
-   "collapsed": false,
-   "gridPos": {
-    "x": 0,
-    "y": 32,
-    "w": 24,
-    "h": 1
-   },
-   "panels": []
+   "options": {
+    "legend": {
+     "displayMode": "table",
+     "placement": "bottom",
+     "showLegend": true,
+     "calcs": [
+      "lastNotNull",
+      "max"
+     ]
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   }
   },
   {
    "type": "timeseries",
-   "title": "활성·대기",
-   "id": 15,
+   "title": "DB 커넥션(활성·유휴·대기)",
+   "id": 25,
    "gridPos": {
     "x": 0,
-    "y": 33,
+    "y": 66,
     "w": 12,
     "h": 8
    },
@@ -510,7 +1683,7 @@
       "uid": "prom"
      },
      "expr": "hikaricp_connections_active{host=~\"$host\"}",
-     "legendFormat": "{{host}} active"
+     "legendFormat": "{{host}} 활성"
     },
     {
      "refId": "B",
@@ -519,7 +1692,7 @@
       "uid": "prom"
      },
      "expr": "hikaricp_connections_idle{host=~\"$host\"}",
-     "legendFormat": "{{host}} idle"
+     "legendFormat": "{{host}} 유휴"
     },
     {
      "refId": "C",
@@ -528,22 +1701,47 @@
       "uid": "prom"
      },
      "expr": "hikaricp_connections_pending{host=~\"$host\"}",
-     "legendFormat": "{{host}} pending"
+     "legendFormat": "{{host}} 대기"
     }
    ],
    "fieldConfig": {
-    "defaults": {},
+    "defaults": {
+     "custom": {
+      "drawStyle": "line",
+      "lineWidth": 2,
+      "fillOpacity": 8,
+      "gradientMode": "opacity",
+      "showPoints": "never",
+      "spanNulls": false,
+      "axisSoftMin": 0
+     }
+    },
     "overrides": []
    },
-   "options": {}
+   "options": {
+    "legend": {
+     "displayMode": "table",
+     "placement": "bottom",
+     "showLegend": true,
+     "calcs": [
+      "lastNotNull",
+      "max"
+     ]
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "description": "대기가 5분 넘게 0보다 크면 경보가 울립니다(운영 PostgreSQL max_connections 60)."
   },
   {
    "type": "timeseries",
-   "title": "획득 시간·타임아웃",
-   "id": 16,
+   "title": "DB 커넥션 획득 시간·타임아웃",
+   "id": 26,
    "gridPos": {
     "x": 12,
-    "y": 33,
+    "y": 66,
     "w": 12,
     "h": 8
    },
@@ -572,10 +1770,34 @@
     }
    ],
    "fieldConfig": {
-    "defaults": {},
+    "defaults": {
+     "custom": {
+      "drawStyle": "line",
+      "lineWidth": 2,
+      "fillOpacity": 8,
+      "gradientMode": "opacity",
+      "showPoints": "never",
+      "spanNulls": false,
+      "axisSoftMin": 0
+     }
+    },
     "overrides": []
    },
-   "options": {}
+   "options": {
+    "legend": {
+     "displayMode": "table",
+     "placement": "bottom",
+     "showLegend": true,
+     "calcs": [
+      "lastNotNull",
+      "max"
+     ]
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   }
   }
  ]
 }
