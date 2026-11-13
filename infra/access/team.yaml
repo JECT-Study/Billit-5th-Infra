@@ -20,11 +20,11 @@ members:
     tailscale: ""
   - username: dana
     role: FE 리더
-    public_key: ""
-    server_account: ""
-    tailscale: ""
+    public_key: .local/ject-access/dana.pub   # SHA256:QCmoV8Wgd5F/dHx2dbRPGSuGAKorYbB3ZxwLDvHVZaY
+    server_account: 2026-11-12   # 3대 생성·키 지문 확인, 본인 접속 미확인
+    tailscale: 초대 수락·관리자 승인(2026-11-13)
   - username: minseo
     role: FE
     public_key: .local/ject-access/minseo.pub
-    server_account: 2026-11-07 # 3대 키 지문·소유자·권한 확인, 본인 접속 미확인
-    tailscale: 관리자 로그인 확인; 사용자 직접 초대 대기(2026-11-07)
+    server_account: 2026-11-07   # 3대 키 지문·소유자·권한 확인, ject-dev 본인 접속 확인(2026-11-12)
+    tailscale: 접속 확인(2026-11-12)
