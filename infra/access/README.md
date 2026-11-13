@@ -40,6 +40,15 @@
 - Redis는 계정 없이 비밀번호 하나다.
 - 비밀번호는 해당 서버에서 `sudo cat /srv/ject/secrets/<파일>`로 본다. 앱 계정 `pg_app_password`, 관리자 `pg_admin_password`, Redis `redis_password`.
 - 배포할 때는 서버가 앱에 접속값을 넣어 준다(`/srv/ject/secrets/dev-be.env`, `prod-be.env`). yml이나 코드에 비밀번호를 적지 않는다.
+- 소셜 로그인·JWT 값은 따로 `/srv/ject/secrets/dev-be-auth.env`, `prod-be-auth.env`에 있다(`setup-secrets.sh`가 DB 파일을 다시 만들 때 지워지지 않게 분리). 앱에는 환경 변수로 들어간다.
+
+  | 변수 | 내용 |
+  | --- | --- |
+  | `JWT_SECRET` | 토큰 서명 키. 개발과 운영이 다르다 |
+  | `GOOGLE_CLIENT_ID` | 구글 ID 토큰 `aud` 검증값. 개발은 개발용, 운영은 출시용 웹 클라이언트 ID |
+  | `KAKAO_NATIVE_APP_KEY` | 카카오 ID 토큰 `aud` 검증값 |
+  | `APPLE_TEAM_ID`, `APPLE_KEY_ID`, `APPLE_CLIENT_ID` | 애플 client secret 생성과 ID 토큰 `aud` 검증값 |
+  | `APPLE_PRIVATE_KEY_BASE64` | 애플 .p8 키 파일 내용을 base64로 한 줄로 만든 값 |
 
 노트북에서 붙기: DB·Redis 포트는 인터넷과 Tailscale 어디에도 안 열려 있어서, SSH로 서버를 거쳐 노트북 포트로 넘긴다. 이 명령을 띄운 터미널을 닫으면 끊긴다.
 

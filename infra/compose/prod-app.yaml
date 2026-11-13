@@ -16,6 +16,8 @@ services:
     mem_limit: 2048m
     env_file:
       - /srv/ject/secrets/prod-be.env
+      - path: /srv/ject/secrets/prod-be-auth.env   # 소셜 로그인·JWT 값. setup-secrets.sh가 덮어쓰지 않게 따로 둔다
+        required: false
     environment:
       APP_ENV: prod
       SPRING_PROFILES_ACTIVE: prod
