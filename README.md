@@ -11,7 +11,7 @@ Billit의 OCI 서버 구성과 공통 배포 워크플로를 관리합니다.
 | 개발 (`ject-dev`) | 개발 앱·DB, Prometheus·Loki·Grafana |
 
 서버는 각각 OCI Ampere A1 1 OCPU, 메모리 6GB, 디스크 50GB를 사용합니다.
-현재 배포 확인용 앱을 실행 중이며, 실제 BE·FE 앱 연결은 준비 중입니다.
+개발 서버에는 BE·FE 앱이 자동으로 배포되고 있으며, 운영 서버 첫 배포는 준비 중입니다.
 
 ## 배포
 
