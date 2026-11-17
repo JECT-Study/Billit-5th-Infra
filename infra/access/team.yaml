@@ -13,11 +13,11 @@ members:
     public_key: .local/ject-access/sangcci.pub   # SHA256:SmYttvfMmvxIWiKhwnFmkdBRN75VeGGzqv3dIqYetvU
     server_account: 2026-10-17   # 처음 sanghyuk로 만들고 본인 요청으로 sangcci로 이름 변경(같은 날)
     tailscale: 접속 확인(2026-10-17)
-  - username: junwon
+  - username: juvvonk
     role: BE
-    public_key: ""
-    server_account: ""
-    tailscale: ""
+    public_key: .local/ject-access/juvvonk.pub   # SHA256:SYJlRIn5Gwlqq7k4gFK931sghy/rm3buvSYzwU9wKFA
+    server_account: 2026-11-17   # 3대 생성·키 지문 확인, 본인 접속 미확인
+    tailscale: 초대 전(2026-11-17 이메일 받음)
   - username: dana
     role: FE 리더
     public_key: .local/ject-access/dana.pub   # SHA256:QCmoV8Wgd5F/dHx2dbRPGSuGAKorYbB3ZxwLDvHVZaY
