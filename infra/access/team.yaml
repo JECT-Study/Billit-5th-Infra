@@ -17,7 +17,7 @@ members:
     role: BE
     public_key: .local/ject-access/juvvonk.pub   # SHA256:SYJlRIn5Gwlqq7k4gFK931sghy/rm3buvSYzwU9wKFA
     server_account: 2026-11-17   # 3대 생성·키 지문 확인, 본인 접속 미확인
-    tailscale: 초대 전(2026-11-17 이메일 받음)
+    tailscale: 초대(2026-11-18), 수락·승인 전
   - username: dana
     role: FE 리더
     public_key: .local/ject-access/dana.pub   # SHA256:QCmoV8Wgd5F/dHx2dbRPGSuGAKorYbB3ZxwLDvHVZaY
