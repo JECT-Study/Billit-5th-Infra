@@ -28,6 +28,7 @@ Billit 서버의 구성, 설치 절차, 모니터링 설정을 정리한다.
 | `smoke-app/` | 배포 경로 확인용 이미지(/healthz, /readyz=DB·Redis 연결, /version) |
 | `github-workflows/` | 공통 빌드·배포 워크플로 사본과 앱 호출 예시. 연결 방법은 `github-workflows/README.md` |
 | `access/` | 팀원 계정·접속 방법(Tailscale, 비상용 Bastion 스크립트) |
+| `INCIDENT-RUNBOOK.md` | 개인정보 유출 사고 때의 증거 보존, 접근 차단(계정 잠금·세션 일괄 종료·키 교체·롤백)과 영향 범위 확인 |
 | `tests/` | 로컬 통합 시험(`local-e2e.sh` 배포·백업, `local-obs-e2e.sh` 모니터링·Swagger·Redis 정책)과 OCI CLI 대역 |
 
 ## 서버 배치
