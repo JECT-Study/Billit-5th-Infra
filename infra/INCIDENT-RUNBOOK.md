@@ -105,4 +105,21 @@ OCI 콘솔 도움말(?) > Create a Support request에서 Service Request로 접�
 
 - 막은 접근, 바꾼 키, 지운 세션 수와 시각을 기록한다.
 - 원인을 고친 뒤 개발 서버에서 같은 공격 경로가 막혔는지 확인한다.
-- 예방 점검은 출시 전 1회, 이후 분기 1회 한다.
+
+## 6. 예방 점검 (출시 전 1회, 이후 분기 1회)
+
+| 대상 | 확인 방법 | 기대 결과 |
+| --- | --- | --- |
+| 서버 계정 | 3대에서 `sudo ject-user list` | 지금 팀원 계정만 있고, 나간 사람은 잠겨 있다 |
+| 사설망 | Tailscale 관리 콘솔의 사용자·기기 목록 | 쓰지 않는 기기와 나간 사용자가 없다 |
+| 공개 포트 | OCI NSG 규칙, 운영 앱 서버 외부에서 `nc -vz <공인 IP> 22 5432 6379` | 80·443만 열려 있다 |
+| 보안 업데이트 | 3대에서 `cat /var/run/reboot-required` 유무, `apt list --upgradable` | 재부팅 대기와 밀린 보안 업데이트가 없다 |
+| 백업·복원 | Grafana 「JECT 개요」 백업·복원, `/srv/ject/backup-status/last-success.json` | 최근 백업 성공, 이번 달 복원 시험 성공 |
+| 로그 보관 | Grafana Explore에서 8일 전 로그 조회 | 7일 지난 로그가 없다 |
+| 로그인 기록 | 운영 DB `SELECT min(occurred_at) FROM login_history` | 3개월보다 오래된 기록이 없다 |
+| 인증서 | Grafana 인증서 만료 패널 | 만료까지 14일 넘게 남았다 |
+| 비밀값 | `/srv/ject/secrets` 파일 권한, GitHub Environments 비밀값 목록 | 파일은 0400·0600이고, 쓰지 않는 비밀값이 없다 |
+| 모니터링 계정 | Grafana 사용자 목록 | 지금 팀원 계정만 있다 |
+| 저장소 권한 | GitHub 조직·저장소 접근자 목록 | 팀원만 쓰기 권한이 있다 |
+
+점검 결과와 고친 항목은 날짜와 함께 남긴다.
