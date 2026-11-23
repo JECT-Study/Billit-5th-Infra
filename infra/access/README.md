@@ -51,6 +51,7 @@
   | `APPLE_PRIVATE_KEY_BASE64` | 애플 .p8 키 파일 내용을 base64로 한 줄로 만든 값 |
   | `AUTH_TOKEN_ENCRYPTION_KEY` | 애플 refresh token을 DB에 암호화해 저장할 때 쓰는 키(base64 32바이트). 바꾸면 저장된 토큰을 못 읽는다 |
   | `POLICY_CONTENT_BASE_URL` | 가입 화면 약관 전문 주소의 앞부분(`{값}/{약관 종류}/{버전}`). 도메인이 없어 지금은 임시 sslip.io 주소이고 약관 페이지는 아직 없다 |
+  | `TRIP_INVITATION_BASE_URL` | 초대 링크 주소의 앞부분(`{값}/{초대 코드}`). FE 웹 경로 `/invitations/{초대 코드}`에 맞춘다. 지금은 임시 sslip.io 주소다 |
 
 노트북에서 붙기: DB·Redis 포트는 인터넷과 Tailscale 어디에도 안 열려 있어서, SSH로 서버를 거쳐 노트북 포트로 넘긴다. 이 명령을 띄운 터미널을 닫으면 끊긴다.
 
