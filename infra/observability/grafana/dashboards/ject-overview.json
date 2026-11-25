@@ -364,7 +364,7 @@
     "wideLayout": true,
     "showPercentChange": false
    },
-   "description": "자동 갱신은 만료 30일 전부터 시도합니다. 14일 미만이면 경보가 울립니다. 지금은 임시 이름(sslip.io) 인증서입니다."
+   "description": "자동 갱신은 만료 30일 전부터 시도합니다. 14일 미만이면 경보가 울립니다. 지금은 무료 DuckDNS 이름(jectbillit.duckdns.org) 인증서입니다."
   },
   {
    "type": "stat",

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # 운영 앱 VM의 Let's Encrypt 인증서 발급·갱신 (HTTP-01 webroot)
-#   ject-cert issue    /srv/ject/app/edge.env의 PROD_DOMAIN(,DEV_DOMAIN)으로 최초 발급
+#   ject-cert issue    /srv/ject/app/edge.env의 PROD_DOMAIN(,DEV_DOMAIN)의 모든 이름으로 발급(이름이 바뀌면 같은 인증서를 다시 발급)
 #   ject-cert renew    만료 30일 이내면 갱신, 갱신됐을 때만 Nginx 설정 재생성·reload
 #   ject-cert dry-run  스테이징 서버로 갱신 시험(실제 인증서 변경 없음)
 set -euo pipefail
@@ -18,7 +18,7 @@ reload_nginx() {
 case "${1:-}" in
 issue)
   [ -n "${PROD_DOMAIN:-}" ] || { echo "PROD_DOMAIN 미설정" >&2; exit 1; }
-  domains=(-d "$PROD_DOMAIN"); [ -n "${DEV_DOMAIN:-}" ] && domains+=(-d "$DEV_DOMAIN")
+  domains=(); for d in $PROD_DOMAIN ${DEV_DOMAIN:-}; do domains+=(-d "$d"); done
   email=(--register-unsafely-without-email); [ -n "${ACME_EMAIL:-}" ] && email=(--email "$ACME_EMAIL")
   $EDGE run --rm -T certbot certonly --webroot -w /var/www/acme --cert-name "$CERT_NAME" \
     "${domains[@]}" "${email[@]}" --agree-tos --non-interactive --keep-until-expiring

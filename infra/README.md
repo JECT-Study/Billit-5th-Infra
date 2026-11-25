@@ -55,7 +55,7 @@ sshd는 키 로그인만, `AllowGroups ject-admins deploy`, `MaxAuthTries 3`.
 4. 앱 VM: 데이터 VM의 앱 DB·Redis 비밀값을 표준입력으로 `setup-secrets.sh prod-app-env <데이터 사설IP>`에 전달(화면 출력 없음) → `render-nginx.sh edge` → `ject-edge` 기동 → `ject-deploy deploy prod be <image@digest>`.
 5. 개발 VM: `setup-secrets.sh dev`, `dev-app-env` → `ject-dev-data`, `ject-dev-gateway` 기동 → `ject-deploy deploy dev be ...`. 운영 Nginx의 `DEV_UPSTREAM=<개발 사설IP>:8080`.
 6. CI: 환경별 배포 키 공개키를 `ject-deploy-key install <pub> <Bastion 사설 IP>`(운영 앱·개발 VM) → GitHub Environment 비밀값(`github-workflows/README.md`).
-7. 도메인이 생기면 `/srv/ject/app/edge.env`에 `PROD_DOMAIN`, `DEV_DOMAIN` → DNS A 레코드 → `ject-cert issue`.
+7. 도메인이 생기면 `/srv/ject/app/edge.env`에 `PROD_DOMAIN`, `DEV_DOMAIN` → DNS A 레코드 → `ject-cert issue`. 이름을 바꿀 때는 새 이름 뒤에 옛 이름을 공백으로 남기면 전환 중에도 둘 다 동작한다(첫 이름이 대표).
 8. 백업: `systemctl start ject-pg-backup` → `ject-pg-restore-test latest` 성공 확인.
 
 ## 모니터링

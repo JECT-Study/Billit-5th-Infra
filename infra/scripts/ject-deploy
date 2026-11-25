@@ -111,7 +111,8 @@ ready_checks() {   # service
   [ "$ok" = 1 ] || { log "앱 readiness 실패"; return 1; }
   # 2) Nginx 라우팅을 거친 readiness
   if [ "$ENVN" = prod ] && [ -n "${PROD_DOMAIN:-}" ] && [ -s "/srv/ject/certs/live/${CERT_NAME:-ject}/fullchain.pem" ]; then
-    curl -fsS -m 5 --resolve "$PROD_DOMAIN:443:127.0.0.1" "https://$PROD_DOMAIN$ready_path" >/dev/null || { log "Nginx(HTTPS) 경유 readiness 실패"; return 1; }
+    local host="${PROD_DOMAIN%% *}"
+    curl -fsS -m 5 --resolve "$host:443:127.0.0.1" "https://$host$ready_path" >/dev/null || { log "Nginx(HTTPS) 경유 readiness 실패"; return 1; }
   elif [ "$ENVN" = prod ]; then
     curl -fsS -m 5 "http://127.0.0.1$ready_path" >/dev/null || { log "Nginx 경유 readiness 실패"; return 1; }
   else

@@ -3,6 +3,7 @@
 #   운영 앱 VM: render-nginx.sh edge   (환경: /srv/ject/app/edge.env)
 #   개발 VM:   render-nginx.sh dev-gateway
 # edge.env 변수: PROD_DOMAIN(선택), DEV_DOMAIN(선택), DEV_UPSTREAM(개발 VM 사설IP:8080)
+#   PROD_DOMAIN·DEV_DOMAIN에는 이름을 공백으로 여러 개 쓸 수 있다(첫 이름이 대표, 뒤는 옛 이름 유지용).
 set -euo pipefail
 MODE="${1:?edge|dev-gateway}"
 # /usr/local/sbin의 링크로 실행해도 실제 설치 위치(/opt/ject)를 기준으로 원본을 찾는다.
