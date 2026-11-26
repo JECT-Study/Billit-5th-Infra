@@ -51,6 +51,23 @@ EOF
   fi
 }
 
+# 영수증 인식: 원본 이미지를 디스크 임시 파일 없이 메모리에서만 받는다(Docs 지출 설계서 「영수증 이미지 처리」).
+# 동시 업로드 제한(nginx.conf의 receipt_upload)에 걸리면 앱 오류 형식과 같은 JSON 503을 돌려준다. 앱이 보낸 503은 그대로 넘긴다.
+receipt_location() {   # $1 = proxy_pass 줄
+  cat <<EOF
+    location ~ ^/api/v1/trips/[^/]+/receipt-recognitions\$ {
+        client_body_buffer_size 15m;
+        limit_conn receipt_upload 4;
+        error_page 503 = @receipt_busy;
+        $1
+    }
+    location @receipt_busy {
+        default_type application/json;
+        return 503 '{"code":"EXPENSE_RECOGNITION_UNAVAILABLE","message":"영수증 인식을 잠시 사용할 수 없습니다. 잠시 후 다시 시도해 주세요.","errors":null}';
+    }
+EOF
+}
+
 app_locations() {   # $1 = be upstream, $2 = fe upstream(비우면 be가 전부 처리), $3 = dev면 개발 게이트웨이 규칙
   local be="$1" fe="${2:-}" internal="$deny_internal"
   [ "${3:-}" = dev ] && internal="$(dev_internal "$be")"
@@ -60,6 +77,7 @@ $internal
         set \$be_up $be;
         proxy_pass http://\$be_up/readyz;$PC
     }
+$(receipt_location "set \$be_up $be; proxy_pass http://\$be_up;$PC")
     location /api/ {
         set \$be_up $be;
         proxy_pass http://\$be_up;$PC
@@ -158,6 +176,7 @@ server {
 $(tls_block "$CERT_NAME")
 $common_headers
     add_header X-Robots-Tag "noindex, nofollow" always;
+$(receipt_location "proxy_pass http://$DEV_UPSTREAM;$proxy_common")
     location / {
         proxy_pass http://$DEV_UPSTREAM;$proxy_common
     }
