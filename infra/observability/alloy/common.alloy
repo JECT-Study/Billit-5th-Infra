@@ -132,7 +132,7 @@ loki.relabel "require_job" {
 
 // ---- 민감정보 제외(수집 단계의 2차 방어) -------------------------------------
 // 1차는 앱이 애초에 남기지 않는 것이다(서버 저장소 docs/operations/logging.md). 여기서는 새어 나온 값을 가린다.
-// stage.replace는 캡처 그룹 부분만 replace 값으로 바꾼다. 패턴은 infra/tests/alloy-mask-test.sh로 시험한다.
+// stage.replace는 캡처 그룹 부분만 replace 값으로 바꾼다. 패턴은 infra/tests/local-obs-e2e.sh로 시험한다.
 loki.process "mask" {
   // 영수증 원문·OCR 결과가 실린 줄은 통째로 버린다.
   stage.drop {
@@ -153,6 +153,20 @@ loki.process "mask" {
   }
   stage.replace {
     expression = "(?i)(?:password|passwd|pwd|secret|token|access_token|refresh_token|api_key|apikey|authorization|cookie)\\\\?\"?\\s*[:=]\\s*\\\\?\"?([^\"\\\\\\s,&}]+)"
+    replace    = "[REDACTED]"
+  }
+  // Nginx 오류 로그에는 접속자 IP와 쿼리 문자열이 그대로 남는다(접근 로그는 형식에서 뺐다).
+  stage.replace {
+    expression = "client: ([0-9A-Fa-f.:]+)"
+    replace    = "[REDACTED_IP]"
+  }
+  stage.replace {
+    expression = "(?:request|referrer): \"[^\"?]*(\\?[^\" ]*)"
+    replace    = "?[REDACTED]"
+  }
+  // 초대 코드는 참여자 확정 전까지 만료가 없는 참여 토큰이라 웹 경로 /invitations/{코드}에서 가린다.
+  stage.replace {
+    expression = "/invitations/([A-Za-z0-9]+)"
     replace    = "[REDACTED]"
   }
   stage.replace {

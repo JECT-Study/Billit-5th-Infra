@@ -96,7 +96,7 @@ name: ject-test
 services:
   leaky:
     image: busybox:stable
-    command: ["sh", "-c", "while true; do echo '{\"level\":\"ERROR\",\"message\":\"login user=kim@example.com phone=010-1234-5678 Authorization: Bearer abc.def-123 password=hunter2 card 1234-5678-9012-3456 jwt eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U\"}'; echo 'receipt_raw {\"analyzeResult\": \"STARBUCKS 4500\"}'; echo '{\"level\":\"INFO\",\"message\":\"정상 로그 marker-ok\"}'; sleep 5; done"]
+    command: ["sh", "-c", "while true; do echo '{\"level\":\"ERROR\",\"message\":\"login user=kim@example.com phone=010-1234-5678 Authorization: Bearer abc.def-123 password=hunter2 card 1234-5678-9012-3456 jwt eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U\"}'; echo 'receipt_raw {\"analyzeResult\": \"STARBUCKS 4500\"}'; echo '{\"method\":\"GET\",\"path\":\"/invitations/A7K2PQ\",\"status\":200}'; echo '2026/11/26 06:46:52 [error] 1#1: *1 upstream failed, client: 198.51.100.7, server: x, request: \"GET /api/v1/trip-invitations?code=Q9W8E7 HTTP/2.0\", host: \"x\"'; echo '{\"level\":\"INFO\",\"message\":\"정상 로그 marker-ok\"}'; sleep 5; done"]
 EOF
 docker compose -f /tmp/ject-test.yaml up -d >/dev/null
 q() { curl -fsS -G http://127.0.0.1:9090/api/v1/query --data-urlencode "query=$1"; }
@@ -106,7 +106,7 @@ check "Alloy 자체 지표 도착" retry 12 bash -c "curl -fsS -G http://127.0.0
 lq() { curl -fsS -G http://127.0.0.1:3100/loki/api/v1/query_range --data-urlencode "query=$1" --data-urlencode "since=10m" --data-urlencode "limit=50"; }
 check "로그 도착(project=ject-test)" retry 24 bash -c "curl -fsS -G http://127.0.0.1:3100/loki/api/v1/query_range --data-urlencode 'query={project=\"ject-test\"}' --data-urlencode since=10m | grep -q marker-ok"
 L="$(lq '{project="ject-test"}' || true)"
-for s in kim@example.com 010-1234-5678 abc.def-123 hunter2 1234-5678-9012-3456 dozjgNryP4J3jVmNHl0w5N STARBUCKS; do
+for s in kim@example.com 010-1234-5678 abc.def-123 hunter2 1234-5678-9012-3456 dozjgNryP4J3jVmNHl0w5N STARBUCKS A7K2PQ 198.51.100.7 Q9W8E7; do
   check "로그에 원문 없음: $s" bash -c "! printf '%s' \"\$1\" | grep -qF -- \"$s\"" _ "$L"
 done
 check "가림 표시 남음([REDACTED_EMAIL])" bash -c "printf '%s' \"\$1\" | grep -qF REDACTED_EMAIL" _ "$L"
