@@ -101,7 +101,7 @@ OCI 대신 `tests/fake-oci.py`를 쓰므로, 실제 버킷·인스턴스 주체 
 
 - [Redis 지표 수집](observability/redis-README.md): 앱 계정과 축출 정책을 유지하고 제한된 전용 관측 계정·Alloy overlay를 추가한다. 선택 경보4개를 별도 생성하므로 기본20개와 합하면24개다.
 - [Discord 팀 알림](observability/grafana/README-alert-contact.md): 기존 이메일 수신처에 보호된 웹후크 receiver를 추가한다. 공개 저장소에는 실제 URL을 저장하지 않는다.
-- [개발 추적 수집](observability/otel/README.md): 전용1GiB 저장공간·내부 격리·루프백 수신·자원 제한을 갖춘 합성시험용 경로다. 실제 앱 계측은 별도다.
+- [개발 추적 수집](observability/otel/README.md): 전용1GiB 저장공간·내부 격리·자원 제한을 갖춘 개발 VM 전용 경로다. 개발 BE를 OTel Java agent로 연결했고, 운영에는 설치하지 않았다.
 - 복원 시험은 체크섬·manifest를 검증하고 원 소유권·역할·권한을 복원한다. 테이블별 행 수 비교 성공은 실제 업무 시나리오 복구 검증을 대신하지 않는다.
 
 ```sh

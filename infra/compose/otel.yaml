@@ -71,7 +71,12 @@ services:
         read_only: true
         bind: { create_host_path: false }
     ports: ["127.0.0.1:3200:3200", "127.0.0.1:4318:4318", "127.0.0.1:12346:12346"]
-    networks: [traces, ingress]
+    # app: 개발 BE가 OTLP를 보내는 경로(http://ject-otel:4318). 프록시는 이 망에서도 고정 upstream만 전달한다.
+    networks:
+      traces:
+      ingress:
+      app:
+        aliases: [ject-otel]
     depends_on: [tempo, collector]
     logging: *logging
 networks:
@@ -79,3 +84,6 @@ networks:
     driver: bridge
   traces:
     internal: true
+  app:
+    name: ject-dev-net
+    external: true

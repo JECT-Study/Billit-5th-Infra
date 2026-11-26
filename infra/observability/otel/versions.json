@@ -4,7 +4,7 @@
     "version": "2.33.1",
     "sha256": "e43a270df53c6f423e0ab157be9c27ccc01d5dc3232e162fe54777573db2f149",
     "release": "https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases/tag/v2.33.1",
-    "status": "official checksum, JDK21 loading and local HttpClient/HttpServer automatic CLIENT/SERVER spans with matching propagated trace verified; Billit/Spring app compatibility not verified"
+    "status": "official checksum verified; attached to dev billit-be on 2026-11-26 (HTTP server and JDBC spans reach Tempo, raw path/query not stored); production not installed"
   },
   "tempo": {
     "version": "3.1.1",

@@ -1,14 +1,16 @@
 # 개발 VM 선택 설치: trace 저장소
 
-기존 로그/메트릭 Alloy와 별도 프로세스다. `infra-validation` 서비스의 합성 trace만
-수용한다. `billit-be`와 Java agent는 연결하지 않았다. 서비스 허용목록을 넓히기 전에
-실제 앱의 개인정보·샘플링 계약, SDK 재시도, 개발 VM 메모리를 다시 검토한다.
+기존 로그/메트릭 Alloy와 별도 프로세스다. 합성 시험용 `infra-validation`과 개발 BE `billit-be`의
+trace만 받는다. 개발 BE는 OTel Java agent로 연결했다(아래 「개발 BE 연결」). 서비스 허용목록을 더 넓히기 전에
+개인정보·샘플링 계약, SDK 재시도, 개발 VM 메모리를 다시 검토한다.
 기본 설치 스크립트에서 자동 활성화하지 않는다. 운영 VM에는 설치하지 않는다.
 
 ## 경계
 
 - 호스트에는 `127.0.0.1:4318`(OTLP HTTP), `:3200`(Tempo), `:12346`(collector 진단)만 연다.
-  Tempo와 collector는 Docker 내부 전용 네트워크에만 연결하며 앱 네트워크·공개 OTLP·gRPC는 없다.
+  Tempo와 collector는 Docker 내부 전용 네트워크에만 연결하며 공개 OTLP·gRPC는 없다.
+  개발 BE가 보낼 수 있게 proxy만 앱 네트워크 `ject-dev-net`에 `ject-otel` 이름으로 붙인다.
+  이 네트워크의 다른 컨테이너도 proxy의 세 포트에 닿지만, proxy가 전달하는 것은 아래 허용 경로뿐이다.
   Docker internal-only 컨테이너에는 기본 gateway가 없어 host publish가 작동하지 않으므로
   전용 Nginx proxy만 내부 traces + 별도 ingress bridge에 연결하여 루프백 포트를 게시한다.
   **외부 경로를 갖는 것은 proxy뿐**이다. 고정된 Tempo/collector DNS upstream만 전달하며
@@ -21,6 +23,8 @@
 - 원문 이름·URL·쿼리·본문·SQL·식별자·이벤트·scope/resource metadata를 제거한다.
   links가 있는 span과 허용되지 않은 서비스는 버린다. 허용 HTTP method, 정수 상태코드,
   DB 종류만 유지한다. trace/span ID·시간·부모 관계는 보존하므로 실제 사용자 ID를 넣으면 안 된다.
+  `billit-be`만 span 이름(`GET /api/v1/trips/{tripId}` 같은 라우트 패턴, `SELECT ject_dev.trip` 같은 SQL 동작),
+  `http.route`, DB 동작·테이블 이름을 더 남긴다. 형식이 맞지 않는 이름은 `operation`으로 바꾼다.
 - Tempo 입력4KiB/s·burst1MiB, 동시 trace100·trace당256KiB.
   로컬 전용 파일시스템 최대1GiB가 WAL/블록의 물리적 경계다.
   retention6h는 비동기 정리 기준이며 6시간 즉시 삭제 보증이 아니다.
@@ -80,6 +84,29 @@ curl --fail http://127.0.0.1:3200/ready
 Grafana datasource 파일 설치 후 기존 Grafana만 재시작하고 datasource health와
 Explore의 합성 trace ID 조회를 확인한다. Grafana는 기존 SSH 터널로 접속한다.
 실제 앱 endpoint 설정은 이 절차에 포함되지 않는다.
+
+## 개발 BE 연결
+
+개발 BE 컨테이너에 OTel Java agent를 붙여 `http://ject-otel:4318`로 보낸다. 앱 코드와 이미지는 바꾸지 않는다.
+
+1. agent 파일을 `versions.json`의 체크섬으로 확인하고 `/opt/ject/otel/agent/opentelemetry-javaagent.jar`(root, 0644)에 둔다.
+2. `dev-be-otel.env.example`의 값을 `/etc/ject/dev-be-otel.env`(root, 0644)로 둔다.
+3. `sudo ject-deploy deploy dev be <지금 이미지>`로 다시 띄운다. `compose/dev-app.yaml`이 위 파일과 agent 폴더를 읽는다.
+
+끄기: `/etc/ject/dev-be-otel.env`를 지우고 3번을 다시 실행한다. 파일이 없으면 agent 없이 뜬다.
+
+기동 시간(2026-11-26 개발 VM, 같은 이미지의 임시 컨테이너로 실측, 준비 응답까지):
+
+| CPU 한도 | agent 없음 | agent 전체 계측 | agent 필요한 계측만 |
+| --- | --- | --- | --- |
+| 0.30 | 115초 | 177초 | 149초 |
+| 0.50 | 67초 | 105초 | 88초 |
+
+0.30에서는 agent를 붙이면 컨테이너 상태 검사(시작 120초 + 재시도 30초)와 배포 대기(180초)를 넘겨 배포가 실패한다.
+그래서 개발 BE의 CPU 한도를 0.50으로 올리고 계측은 Tomcat·Spring MVC·JDBC·Lettuce·HTTP 클라이언트만 켰다.
+메모리는 agent 없이 약 410MiB, 붙이면 약 470MiB다(상한 1024MiB).
+상태 확인(`/healthz`, `/readyz`)과 지표 수집(`/actuator/prometheus`) 요청도 trace로 들어온다.
+Grafana Explore에서는 `{resource.service.name="billit-be" && span.http.route=~"/api/.*"}`로 거른다.
 
 ## 검증과 롤백
 

@@ -69,7 +69,9 @@ class ComposeTests(unittest.TestCase):
         for name in ('tempo', 'collector'):
             self.assertEqual(set(self.config['services'][name]['networks']), {'traces'})
             self.assertNotIn('ports', self.config['services'][name])
-        self.assertEqual(set(self.config['services']['proxy']['networks']), {'traces', 'ingress'})
+        self.assertEqual(set(self.config['services']['proxy']['networks']), {'traces', 'ingress', 'app'})
+        self.assertEqual(self.config['services']['proxy']['networks']['app']['aliases'], ['ject-otel'])
+        self.assertTrue(self.config['networks']['app']['external'])
         for svc in self.config['services'].values():
             self.assertEqual(svc['restart'], 'no')
             self.assertTrue(svc['read_only'])
@@ -96,6 +98,24 @@ class ComposeTests(unittest.TestCase):
         self.assertNotIn('proxy_pass $', config)
         self.assertIn('location = /v1/traces', config)
         self.assertIn('access_log off;', config)
+
+    def test_collector_accepts_only_two_services_and_drops_raw_fields(self):
+        config = (ROOT / 'observability/otel/collector.alloy').read_text()
+        self.assertIn('!= "infra-validation" and resource.attributes["service.name"] != "billit-be"', config)
+        self.assertIn('spanevent = [`true`]', config)
+        self.assertIn('`set(status.message, "")`', config)
+        keep = config[config.index('`keep_keys(attributes, ["http.request.method"'):].split('\n')[0]
+        for raw in ('url.', 'db.query', 'db.statement', 'user', 'client.address', 'exception'):
+            self.assertNotIn(raw, keep)
+
+    def test_backend_agent_is_opt_in(self):
+        app = (ROOT / 'compose/dev-app.yaml').read_text()
+        self.assertIn('- path: /etc/ject/dev-be-otel.env\n        required: false', app)
+        self.assertIn('/opt/ject/otel/agent:/otel:ro', app)
+        self.assertNotIn('javaagent', app)
+        env = (ROOT / 'observability/otel/dev-be-otel.env.example').read_text()
+        self.assertIn('OTEL_METRICS_EXPORTER=none', env)
+        self.assertIn('OTEL_LOGS_EXPORTER=none', env)
 
     def test_systemd_preflight_and_mount_order(self):
         unit = (ROOT / 'observability/otel/ject-otel.service').read_text()

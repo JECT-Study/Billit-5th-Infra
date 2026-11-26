@@ -12,10 +12,14 @@ services:
     restart: unless-stopped
     stop_grace_period: 30s
     mem_limit: 1024m
-    cpus: 0.30
+    # 0.30에서는 기동이 115초라 배포 대기(180초)·상태 검사 여유가 적었다. 0.50에서 67초, 추적 에이전트를 붙여도 88초(2026-11-26 실측).
+    cpus: 0.50
     env_file:
       - /srv/ject/secrets/dev-be.env
       - path: /srv/ject/secrets/dev-be-auth.env   # 소셜 로그인·JWT 값. setup-secrets.sh가 덮어쓰지 않게 따로 둔다
+        required: false
+      # 추적(선택): 이 파일이 있으면 OTel Java 에이전트를 붙인다. 지우고 다시 배포하면 꺼진다(observability/otel/README.md).
+      - path: /etc/ject/dev-be-otel.env
         required: false
     environment:
       APP_ENV: dev
@@ -24,6 +28,8 @@ services:
       TZ: Asia/Seoul
       JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=50 -XX:+ExitOnOutOfMemoryError"
     secrets: [redis_password]
+    volumes:
+      - /opt/ject/otel/agent:/otel:ro
     networks: [ject-dev-net]
     # 관리 포트 8081(/actuator/prometheus)은 호스트 루프백에만 연다(같은 VM의 Alloy만 수집).
     ports:

@@ -1,5 +1,7 @@
-// 개발 인프라 검증용 opt-in. 실제 앱 연결 전 서비스/메타데이터 계약 검토 필요.
-// infra-validation 외 service 및 links 있는 span은 폐기. 원문 로그/debug exporter 없음.
+// 개발 VM 전용 opt-in. 받는 service는 합성 시험용 infra-validation과 개발 BE(billit-be)뿐이다.
+// 그 밖의 service와 links 있는 span은 폐기. 원문 로그/debug exporter 없음.
+// billit-be는 span 이름(라우트 패턴·저장소 메서드·SQL 동작)과 http.route, DB 동작·테이블 이름까지 남긴다.
+// URL·쿼리·본문·SQL 문·식별자·예외 메시지·이벤트는 어느 service든 남기지 않는다.
 // HTTP endpoint는 컨테이너 내부; Compose는 호스트 루프백만 공개한다.
 logging { level = "warn" }
 
@@ -30,7 +32,7 @@ otelcol.processor.memory_limiter "dev" {
 otelcol.processor.filter "reject_links" {
   error_mode = "propagate"
   traces {
-    span = [`Len(links) > 0`, `resource.attributes["service.name"] != "infra-validation"`]
+    span = [`Len(links) > 0`, `resource.attributes["service.name"] != "infra-validation" and resource.attributes["service.name"] != "billit-be"`]
     spanevent = [`true`]
   }
   output {
@@ -43,8 +45,7 @@ otelcol.processor.transform "sanitize" {
   trace_statements {
     context = "resource"
     statements = [
-      `keep_keys(attributes, [])`,
-      `set(attributes["service.name"], "infra-validation")`,
+      `keep_keys(attributes, ["service.name"])`,
       `set(attributes["deployment.environment.name"], "dev")`,
       `set(schema_url, "")`,
     ]
@@ -61,10 +62,14 @@ otelcol.processor.transform "sanitize" {
   trace_statements {
     context = "span"
     statements = [
-      `set(name, "operation")`,
+      `set(name, "operation") where resource.attributes["service.name"] != "billit-be" or not IsMatch(name, "^[A-Za-z0-9 ._/{}*:$-]{1,120}$")`,
       `set(trace_state, "")`,
       `set(status.message, "")`,
-      `keep_keys(attributes, ["http.request.method", "http.response.status_code", "db.system"])`,
+      `keep_keys(attributes, ["http.request.method", "http.response.status_code", "db.system", "http.route", "db.system.name", "db.operation.name", "db.collection.name"])`,
+      `delete_key(attributes, "http.route") where resource.attributes["service.name"] != "billit-be" or not IsMatch(attributes["http.route"], "^/[A-Za-z0-9._/{}*-]{0,119}$")`,
+      `delete_key(attributes, "db.system.name") where resource.attributes["service.name"] != "billit-be" or (attributes["db.system.name"] != "postgresql" and attributes["db.system.name"] != "redis")`,
+      `delete_key(attributes, "db.operation.name") where resource.attributes["service.name"] != "billit-be" or not IsMatch(attributes["db.operation.name"], "^[A-Za-z ]{1,32}$")`,
+      `delete_key(attributes, "db.collection.name") where resource.attributes["service.name"] != "billit-be" or not IsMatch(attributes["db.collection.name"], "^[A-Za-z0-9_.]{1,64}$")`,
       `delete_key(attributes, "http.request.method") where attributes["http.request.method"] != "GET" and attributes["http.request.method"] != "POST" and attributes["http.request.method"] != "PUT" and attributes["http.request.method"] != "PATCH" and attributes["http.request.method"] != "DELETE" and attributes["http.request.method"] != "HEAD" and attributes["http.request.method"] != "OPTIONS"`,
       `delete_key(attributes, "db.system") where attributes["db.system"] != "postgresql" and attributes["db.system"] != "redis"`,
       `delete_key(attributes, "http.response.status_code") where not IsInt(attributes["http.response.status_code"])`,
