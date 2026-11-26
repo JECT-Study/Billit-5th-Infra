@@ -7,7 +7,7 @@ Billit 서버의 구성, 설치 절차, 모니터링 설정을 정리한다.
 
 | 경로 | 내용 |
 | --- | --- |
-| `oci/` | OpenTofu: Compartment `JECT`, VCN(10.20.0.0/16)·공개/데이터/개발 서브넷·IGW·NAT·Service GW, 역할별 NSG, Bastion, VM 3대(A1 1 OCPU/6GB/50GB, Ubuntu 24.04 aarch64), 예약 공인 IP, 비공개 버킷 3개, 인스턴스 주체 정책, `ject-developers` 그룹 정책 |
+| `oci/` | OpenTofu: Compartment `JECT`, VCN(10.20.0.0/16)·공개/데이터/개발 서브넷·IGW·NAT·Service GW, 역할별 NSG, Bastion, VM 3대(A1 1 OCPU/6GB/50GB, Ubuntu 24.04 aarch64), 예약 공인 IP, 비공개 버킷 5개(업로드 2, DB 백업, 접속 기록, 상태 파일 사본), 인스턴스 주체 정책, `ject-developers` 그룹 정책 |
 | `cloud-init/` | 관리자 계정만 만드는 최소 부트스트랩 |
 | `scripts/bootstrap-host.sh` | Docker Engine·Compose, 로그 순환(10m×3), journald 제한, 무인 보안 업데이트(자동 재부팅 없음), 디렉터리, `deploy` 계정, SSH 비밀번호 금지 |
 | `scripts/install-role.sh` | 역할별 스크립트·Compose·systemd 설치 |
@@ -50,7 +50,7 @@ sshd는 키 로그인만, `AllowGroups ject-admins deploy`, `MaxAuthTries 3`.
 
 ## 구축 순서 (요약)
 
-1. `oci/`: `terraform.tfvars`(저장소 제외)에 `tenancy_ocid`, `admin_ssh_public_key` → `tofu plan` → 확인 후 `tofu apply`.
+1. `oci/`: `terraform.tfvars`(저장소 제외)에 `tenancy_ocid`, `admin_ssh_public_key` → `tofu plan` → 확인 후 `tofu apply`. 적용 뒤 `bash oci/backup-state.sh`로 상태 파일을 `ject-tfstate` 버킷에 올린다(상태 파일은 저장소에 없고 관리자 PC에만 있다).
 2. 각 VM: `infra/`를 `/tmp/ject-infra`로 복사 → `sudo bash bootstrap-host.sh <role>` → `sudo bash install-role.sh <role> <GHCR 소유자>`(팀 이미지의 소유자는 `ject-study`).
 3. 데이터 VM: `setup-secrets.sh prod-data` → `/srv/ject/data.env`에 `DATA_BIND_IP=<사설IP>` → `docker compose -p ject-prod-data -f /opt/ject/compose/prod-data.yaml --env-file /srv/ject/data.env up -d --wait`.
 4. 앱 VM: 데이터 VM의 앱 DB·Redis 비밀값을 표준입력으로 `setup-secrets.sh prod-app-env <데이터 사설IP>`에 전달(화면 출력 없음) → `render-nginx.sh edge` → `ject-edge` 기동 → `ject-deploy deploy prod be <image@digest>`.

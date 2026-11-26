@@ -10,6 +10,7 @@ locals {
     "ject-dev-uploads"  = "개발 업로드 파일"
     "ject-db-backups"   = "운영 PostgreSQL 일일 백업"
     "ject-access-logs"  = "운영 서버·DB 취급자 접속 기록(1년 보관)"
+    "ject-tfstate"      = "OpenTofu 상태 파일 사본(관리자만, 서버 권한 없음)"
   }
 }
 
@@ -20,7 +21,8 @@ resource "oci_objectstorage_bucket" "b" {
   name           = each.key
   access_type    = "NoPublicAccess"
   storage_tier   = "Standard"
-  versioning     = "Disabled"
+  # 상태 파일 사본은 같은 이름으로 덮어 올리므로 이전 판을 남긴다.
+  versioning     = each.key == "ject-tfstate" ? "Enabled" : "Disabled"
   freeform_tags  = merge(local.tags, { purpose = each.value })
 }
 
