@@ -72,7 +72,7 @@ sshd는 키 로그인만, `AllowGroups ject-admins deploy`, `MaxAuthTries 3`.
 ```
 
 - 운영 VM에는 새 인바운드 포트가 없다(밀어 넣기). NSG는 운영 VM → 개발 VM 9090·3100만 추가했다.
-- **Grafana 접속(관리자):** `ssh -N -L 3000:127.0.0.1:3000 seongju@ject-dev`(Tailscale) → 브라우저 `http://127.0.0.1:3000`(창을 닫으면 터널 종료).
+- **Grafana 접속(관리자):** `ssh -N -L 3000:127.0.0.1:3000 seongju@ject-dev`(Tailscale) → 브라우저 `http://localhost:3000`(창을 닫으면 터널 종료). Google 계정으로도 로그인할 수 있다([설정](observability/grafana/README-google-login.md)).
   Tailscale이 안 될 때만 `JECT_SSH_ARGS="-N -L 3000:127.0.0.1:3000" OCI_PROFILE=JECT bash access/ject-ssh.sh seongju dev`(Bastion).
   관리자 비밀번호: 개발 VM `sudo cat /srv/ject/secrets/grafana_admin_password`(사용자 `admin`). 팀원 계정은 사람마다 따로 만든다.
 - 대시보드(상단 링크로 서로 이동, 추적 검색은 개발 Tempo):

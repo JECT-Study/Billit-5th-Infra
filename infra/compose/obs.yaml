@@ -55,12 +55,17 @@ services:
     user: "472:472"
     network_mode: host
     mem_limit: 768m   # 실측: 11/09 대시보드 여러 개를 연달아 열다 512m에서 메모리 초과 종료, 재시작 직후 약 410MiB
+    # Google 로그인(선택): 이 파일이 있으면 켜진다(observability/grafana/README-google-login.md).
+    env_file:
+      - path: /etc/ject/grafana-google.env
+        required: false
     environment:
       GF_SERVER_HTTP_ADDR: 127.0.0.1
       GF_SERVER_HTTP_PORT: "3000"
       GF_SECURITY_ADMIN_USER: admin
       GF_SECURITY_ADMIN_PASSWORD__FILE: /run/secrets/grafana_admin_password
-      GF_SECURITY_COOKIE_SAMESITE: strict
+      # Google 로그인에서 돌아올 때 state 쿠키가 실려야 해서 strict 대신 lax(Grafana 기본값)를 쓴다.
+      GF_SECURITY_COOKIE_SAMESITE: lax
       GF_USERS_ALLOW_SIGN_UP: "false"
       GF_AUTH_ANONYMOUS_ENABLED: "false"
       GF_ANALYTICS_REPORTING_ENABLED: "false"
