@@ -292,6 +292,46 @@ groups:
           description: "운영 데이터 VM: sudo cat /srv/ject/backup-status/restore-last.json, journalctl -u ject-pg-restore-test."
         isPaused: false
   - orgId: 1
+    name: "ject-access-log"
+    folder: "JECT"
+    interval: "1m"
+    rules:
+      - uid: "ject-access-log-ship-stale"
+        title: "접속 기록 업로드 26시간 넘게 성공 없음"
+        condition: "C"
+        data:
+          - refId: "A"
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: "prom"
+            model:
+              refId: "A"
+              expr: "((time() - ject_access_log_ship_last_success_timestamp_seconds{job=\"node\"}) / 3600) or on(host) (999 * ((last_over_time(up{job=\"node\",host=~\"prod-app|prod-data\"}[2m]) == 1) unless on(host) ject_access_log_ship_last_success_timestamp_seconds{job=\"node\"}))"
+              instant: true
+              intervalMs: 30000
+              maxDataPoints: 43200
+          - refId: "C"
+            datasourceUid: "__expr__"
+            model:
+              refId: "C"
+              type: "threshold"
+              expression: "A"
+              conditions:
+                - evaluator:
+                    type: "gt"
+                    params:
+                      - 26
+        noDataState: "OK"
+        execErrState: "Alerting"
+        for: "5m"
+        labels:
+          severity: "warning"
+        annotations:
+          summary: "{{ $labels.host }} 접속 기록 업로드 {{ $values.A.Value }}시간째 성공 없음(999는 지표 없음)"
+          description: "매일 00:30 KST 업로드가 돌지 않았거나 실패했습니다. 해당 서버: journalctl -u ject-access-log-ship. 고친 뒤 sudo ject-access-log-ship <빠진 날짜>로 그날치를 올리세요(infra/access/README.md 「접속 기록과 분기 점검」). 서버 journald는 약 5주만 남습니다."
+        isPaused: false
+  - orgId: 1
     name: "ject-restore-freshness"
     folder: "JECT"
     interval: "1m"

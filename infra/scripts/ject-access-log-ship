@@ -34,4 +34,10 @@ gzip -9 "$out"
 NS=$("$OCI" --auth instance_principal os ns get --query data --raw-output)
 "$OCI" --auth instance_principal os object put -ns "$NS" -bn "$BUCKET" \
   --name "$HOST/${DAY:0:4}/$DAY.log.gz" --file "$out.gz" --no-overwrite >/dev/null
+# 성공 시각을 Node Exporter 지표로 남긴다. 26시간 넘게 성공이 없으면 Grafana 경보가 울린다.
+TEXTFILE_DIR="${TEXTFILE_DIR:-/var/lib/ject/textfile}"
+install -d -m 0755 "$TEXTFILE_DIR"
+printf '# HELP ject_access_log_ship_last_success_timestamp_seconds 접속 기록 업로드 마지막 성공 시각\n# TYPE ject_access_log_ship_last_success_timestamp_seconds gauge\nject_access_log_ship_last_success_timestamp_seconds %s\n' "$(date +%s)" > "$TEXTFILE_DIR/.ject_access_log.prom.tmp"
+chmod 0644 "$TEXTFILE_DIR/.ject_access_log.prom.tmp"
+mv -f "$TEXTFILE_DIR/.ject_access_log.prom.tmp" "$TEXTFILE_DIR/ject_access_log.prom"
 echo "ok: $HOST/${DAY:0:4}/$DAY.log.gz $(stat -c %s "$out.gz") bytes"

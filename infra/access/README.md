@@ -99,6 +99,7 @@ DB 툴(DBeaver, DataGrip 등)에는 호스트 `127.0.0.1`, 포트 `25432`(개발
 
 - `ject-access-log-ship.timer`가 매일 00:30(KST)에 전날치를 `ject-access-logs` 버킷의 `<서버>/<연도>/<날짜>.log.gz`로 올린다. 앱 계정(`ject_app`)의 SQL은 담지 않는다.
 - 서버에는 이 버킷의 생성 권한만 있어 지난 파일을 읽거나 지우거나 덮어쓰지 못한다. 365일이 지난 파일은 버킷 수명 주기 규칙이 지운다.
+- 26시간 넘게 업로드 성공이 없으면 Grafana 경보(「접속 기록 업로드 26시간 넘게 성공 없음」)가 Discord와 메일로 온다.
 - 하루치를 다시 만들 수는 없으니(덮어쓰기 금지) 실패하면 `sudo journalctl -u ject-access-log-ship`으로 원인을 보고 `sudo ject-access-log-ship <날짜>`로 그날치를 올린다. 서버 journald는 약 5주, PostgreSQL 컨테이너 로그는 30MB까지만 남는다.
 - 분기 점검(출시 전 1회, 이후 분기 1회): 관리자 PC에서 그 분기 파일을 받아 새벽 대량 조회, 등록되지 않은 계정·기기의 접속, 운영 DB 내려받기(`COPY`, `pg_dump`)가 있는지 보고 결과를 팀 Notion 점검 기록에 남긴다.
 

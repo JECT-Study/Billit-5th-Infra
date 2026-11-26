@@ -80,7 +80,7 @@ sshd는 키 로그인만, `AllowGroups ject-admins deploy`, `MaxAuthTries 3`.
   - 「JECT 앱」: 앱 상태·버전, Nginx 접근 로그 기준 요청·4xx/5xx·p95·많이 들어온 경로, 개발 FE, 운영 스모크 앱, Spring Boot(HTTP·JVM·Hikari). 운영 Spring Boot 지표는 첫 운영 배포 전까지 비어 있다.
   - 「JECT 로그」: 서비스별 줄 수, 오류로 보이는 로그(관측 도구 제외), Nginx 상태 코드, 로그 수준(앱 JSON 로그), 로그 본문, systemd 작업.
   규칙·대시보드는 `observability/grafana/generate.py`로 생성하고, 해당 파일만 백업·교체한 뒤 Grafana를 재시작한다(대시보드만 바꿀 때는 `POST /api/admin/provisioning/dashboards/reload`로 충분). 기존 서버에 `install-role.sh`를 다시 실행하면 선택 수신처·대시보드·Alloy 설정이 지워질 수 있으므로 관측 변경에 사용하지 않는다.
-- 기본 알림 규칙 19개: 서버 지표 끊김·디스크 80/90%·메모리 15%·CPU 85%, 백업 실패·26시간 성공 없음·복원 시험 실패, 공인 주소 실패·인증서 14일,
+- 기본 알림 규칙 20개: 서버 지표 끊김·디스크 80/90%·메모리 15%·CPU 85%, 백업 실패·26시간 성공 없음·복원 시험 실패, 접속 기록 업로드 26시간 성공 없음, 공인 주소 실패·인증서 14일,
   앱 지표 끊김·5xx 5%·p95 1초·DB 커넥션 대기·운영 오류 로그, 관측도구 누락·지표 전송 실패·로그 폐기·복원 시험 오래됨. OCI 알람: VM 응답 없음(5분)·메모리 90%(10분).
 - 설치 순서(개발 VM): `setup-secrets.sh obs` → `PROBE_PROD_URL=… PROBE_DEV_URL=… setup-secrets.sh obs-env dev dev <개발 IP>` →
   `/etc/ject/alert-relay.env`에 `ALERT_TOPIC_ID=$(tofu output -raw alert_topic_id)` → `docker compose -p ject-obs -f obs.yaml --env-file /etc/ject/host.env up -d` →
@@ -99,7 +99,7 @@ OCI 대신 `tests/fake-oci.py`를 쓰므로, 실제 버킷·인스턴스 주체 
 
 ## 선택 기능과 적용 경계
 
-- [Redis 지표 수집](observability/redis-README.md): 앱 계정과 축출 정책을 유지하고 제한된 전용 관측 계정·Alloy overlay를 추가한다. 선택 경보4개를 별도 생성하므로 기본19개와 합하면23개다.
+- [Redis 지표 수집](observability/redis-README.md): 앱 계정과 축출 정책을 유지하고 제한된 전용 관측 계정·Alloy overlay를 추가한다. 선택 경보4개를 별도 생성하므로 기본20개와 합하면24개다.
 - [Discord 팀 알림](observability/grafana/README-alert-contact.md): 기존 이메일 수신처에 보호된 웹후크 receiver를 추가한다. 공개 저장소에는 실제 URL을 저장하지 않는다.
 - [개발 추적 수집](observability/otel/README.md): 전용1GiB 저장공간·내부 격리·루프백 수신·자원 제한을 갖춘 합성시험용 경로다. 실제 앱 계측은 별도다.
 - 복원 시험은 체크섬·manifest를 검증하고 원 소유권·역할·권한을 복원한다. 테이블별 행 수 비교 성공은 실제 업무 시나리오 복구 검증을 대신하지 않는다.

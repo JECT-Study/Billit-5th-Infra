@@ -21,6 +21,7 @@
 | DB 커넥션 대기 | 앱 pool 지표·DB 연결 수·긴 트랜잭션 | 연결 강제 종료·DB 재시작은 별도 승인 |
 | 오류 로그 급증 | 시간대·서비스·오류 유형을 제한해 조회 | 원본 로그를 Discord로 복사하지 않음 |
 | 백업 실패/오래됨 | 운영 데이터 VM의 `/srv/ject/backup-status/last.json`, 백업 unit 로그, 객체 manifest | 성공 파일 존재와 복원 가능성은 별도. 오래된 백업 임의 삭제 금지 |
+| 접속 기록 업로드 오래됨 | 해당 운영 서버의 `journalctl -u ject-access-log-ship`, timer, textfile 지표, 버킷의 최신 날짜 | 빠진 날짜는 `ject-access-log-ship <날짜>`로 다시 올림. 올라간 파일은 덮어쓰거나 지우지 않음 |
 | 복원 실행 오래됨/지표 누락 | prod-data의 timer·restore-last.json·textfile 수집 확인. 32일 초과·누락·미래 시각·180초 이상 오래된 표본 감시 | 정확한 월별 마감 감시는 아님. 최근 실행만으로 성공 판정 금지, 운영 DB 복원 금지 |
 | 관측 구성요소 중단 | 개발 VM의 Grafana·Loki·Prometheus 상태와 수집 시각 확인 | Grafana 전체 중단은 자기 경보로 발송 불가. OCI 독립 알람 확인 |
 | 지표 전송 실패/로그 폐기 | Alloy 전송 오류·수신측 용량·연결·큐를 제한된 시간대로 조회 | 원본 민감 로그 공유 금지. 손실한 로그가 자동 복구된다고 가정하지 않음 |
@@ -31,7 +32,7 @@
 
 ## 알림 경로와 사각지대
 
-- 실제 적용 확인: Grafana 13.2.4, 기본19개와 선택 Redis4개로 규칙23개, 이메일 relay·Discord receiver2개. 각 운영 규칙 자체의 실장애 발동 시험까지 완료한 것은 아니다.
+- 실제 적용 확인: Grafana 13.2.4, 기본20개와 선택 FE1개·Redis4개로 규칙25개, 이메일 relay·Discord receiver2개. 각 운영 규칙 자체의 실장애 발동 시험까지 완료한 것은 아니다.
 - 기존 경로는 Grafana → 개발 VM relay → OCI Notifications → 이메일이다.
 - Discord 공식 integration을 병행한다. 11/07 별도 합성규칙의 발생·복구 메시지를 팀 서버상태 채널에서 모두 확인하고 임시규칙은 제거했다. 메시지의 localhost Grafana 링크는 관리자 SSH 터널을 연 상태에서 사용한다.
 - 개발 VM/Grafana가 멈추면 위 경로가 멈춘다. OCI 직접 VM 알람 → ACTIVE 이메일 구독이 별도 경로다. Discord가 이 장애도 독립적으로 전달한다고 주장하지 않는다.

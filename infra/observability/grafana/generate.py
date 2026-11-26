@@ -105,6 +105,18 @@ RULES = {
              "월간 백업 복원 시험이 실패했습니다",
              "운영 데이터 VM: sudo cat /srv/ject/backup-status/restore-last.json, journalctl -u ject-pg-restore-test."),
     ],
+    "ject-access-log": [
+        rule("ject-access-log-ship-stale", "접속 기록 업로드 26시간 넘게 성공 없음",
+             # 지표가 없을 때(999)는 그 서버의 지표가 들어올 때만 울린다(서버가 죽은 경우는 「서버 지표 끊김」이 맡는다).
+             '((time() - ject_access_log_ship_last_success_timestamp_seconds{job="node"}) / 3600) or on(host) '
+             '(999 * ((last_over_time(up{job="node",host=~"prod-app|prod-data"}[2m]) == 1) '
+             'unless on(host) ject_access_log_ship_last_success_timestamp_seconds{job="node"}))',
+             "gt", 26, "5m", "warning",
+             f"{HOST} 접속 기록 업로드 {VAL}시간째 성공 없음(999는 지표 없음)",
+             "매일 00:30 KST 업로드가 돌지 않았거나 실패했습니다. 해당 서버: journalctl -u ject-access-log-ship. "
+             "고친 뒤 sudo ject-access-log-ship <빠진 날짜>로 그날치를 올리세요(infra/access/README.md 「접속 기록과 분기 점검」). "
+             "서버 journald는 약 5주만 남습니다."),
+    ],
     "ject-restore-freshness": [
         rule("ject-restore-test-stale", "월간 복원 시험 오래됨 또는 지표 누락",
              '(up{job="node",host="prod-data"} == 1 '
