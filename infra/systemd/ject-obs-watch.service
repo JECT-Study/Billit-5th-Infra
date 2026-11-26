@@ -1,0 +1,11 @@
+[Unit]
+Description=JECT 관측 도구 응답 확인 (Grafana가 못 알리는 장애를 Discord로)
+After=network-online.target
+Wants=network-online.target
+ConditionPathExists=/etc/ject/obs-watch.env
+ConditionPathExists=/srv/ject/secrets/discord_webhook
+
+[Service]
+Type=oneshot
+ExecStart=/opt/ject/bin/ject-obs-watch
+TimeoutStartSec=60

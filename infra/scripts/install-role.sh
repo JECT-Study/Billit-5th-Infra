@@ -31,9 +31,19 @@ install_access_log_ship() {
   systemctl enable --now ject-access-log-ship.timer >/dev/null
 }
 
+# Grafana가 못 알리는 장애(Grafana·개발 VM 자체가 죽은 경우)를 Discord로 알리는 확인 타이머.
+# /etc/ject/obs-watch.env와 웹후크 파일이 있어야 돈다(observability/ALERT-RUNBOOK.md 「알림 경로와 사각지대」).
+install_obs_watch() {
+  install -m 0755 "$SRC/scripts/ject-obs-watch" /opt/ject/bin/
+  install -m 0644 "$SRC/systemd/ject-obs-watch."{service,timer} /etc/systemd/system/
+  systemctl daemon-reload
+  systemctl enable --now ject-obs-watch.timer >/dev/null
+}
+
 case "$ROLE" in
 prod-app)
   install_access_log_ship
+  install_obs_watch
   install_nginx_tools
   install -m 0755 "$SRC/scripts/ject-deploy" "$SRC/scripts/ject-deploy-gate" "$SRC/scripts/ject-deploy-key" /opt/ject/bin/
   install -m 0755 "$SRC/scripts/ject-cert" "$SRC/scripts/ject-domain" /opt/ject/bin/
@@ -63,6 +73,7 @@ prod-data)
   systemctl start ject-backup-metrics.service ;;
 dev)
   install_nginx_tools
+  install_obs_watch
   install -m 0755 "$SRC/scripts/ject-deploy" "$SRC/scripts/ject-deploy-gate" "$SRC/scripts/ject-deploy-key" /opt/ject/bin/
   install -m 0755 "$SRC/scripts/ject-domain" /opt/ject/bin/
   install -m 0644 "$SRC/compose/dev-data.yaml" "$SRC/compose/dev-app.yaml" "$SRC/compose/dev-gateway.yaml" /opt/ject/compose/

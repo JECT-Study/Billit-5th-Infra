@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+# Grafana 경보가 알리지 못하는 장애를 Discord로 직접 알린다(root, ject-obs-watch.timer가 2분마다 실행).
+#   개발 VM:    Grafana가 죽은 경우          WATCH_URL=http://127.0.0.1:3000/api/health
+#   운영 앱 VM: 개발·모니터링 VM이 죽은 경우  WATCH_URL=http://<개발 VM 사설 IP>:9090/  WATCH_OK='^(200|404)$'
+# 연속 3번(약 6분) 실패하면 알리고, 계속 실패하면 4시간마다 다시 알린다. 다시 응답하면 해소를 알린다.
+# 설정 /etc/ject/obs-watch.env: WATCH_NAME, WATCH_URL, WATCH_OK(응답 코드 정규식, 기본 ^200$)
+#   셸이 읽는 파일이라 공백·괄호가 있는 값은 따옴표로 감싼다. 예: WATCH_NAME="개발·모니터링 서버"
+# 웹후크 /srv/ject/secrets/discord_webhook(root, 0600). 주소와 응답 본문은 메시지에 넣지 않는다.
+set -euo pipefail
+THRESHOLD=3
+REPEAT=14400
+
+# 다음 상태와 할 일을 정한다: "<연속 실패 수> <마지막으로 알린 시각> <none|firing|resolved>"
+next_state() {   # 연속 실패 수, 마지막으로 알린 시각(0이면 알린 적 없음), 지금 시각, 이번 확인 결과(ok|fail)
+  local fails=$1 alerted=$2 now=$3
+  if [ "$4" = ok ]; then
+    if [ "$alerted" -gt 0 ]; then echo "0 0 resolved"; else echo "0 0 none"; fi
+    return
+  fi
+  fails=$((fails + 1))
+  if [ "$fails" -ge "$THRESHOLD" ] && { [ "$alerted" -eq 0 ] || [ $((now - alerted)) -ge "$REPEAT" ]; }; then
+    echo "$fails $now firing"
+  else
+    echo "$fails $alerted none"
+  fi
+}
+
+post() {   # 메시지
+  local body
+  body=$(python3 -c 'import json, sys; print(json.dumps({"content": sys.argv[1]}))' "$1")
+  curl -fsS -m 10 -o /dev/null -H 'Content-Type: application/json' -d "$body" "$(cat "$WEBHOOK_FILE")"
+}
+
+[ "${1:-}" = --source-only ] && return 0 2>/dev/null
+# shellcheck disable=SC1091
+. /etc/ject/obs-watch.env
+STATE="${STATE:-/var/lib/ject/obs-watch.state}"
+WEBHOOK_FILE="${WEBHOOK_FILE:-/srv/ject/secrets/discord_webhook}"
+install -d -m 0755 "$(dirname "$STATE")"
+fails=0; alerted=0
+[ -f "$STATE" ] && read -r fails alerted < "$STATE"
+code=$(curl -s -o /dev/null -m 5 -w '%{http_code}' "$WATCH_URL" || true)
+if [[ "$code" =~ ${WATCH_OK:-^200$} ]]; then result=ok; else result=fail; fi
+read -r new_fails new_alerted action <<<"$(next_state "$fails" "$alerted" "$(date +%s)" "$result")"
+case "$action" in
+firing)
+  # 못 보냈으면 알린 시각을 남기지 않아 다음 실행에서 다시 보낸다.
+  post "**${WATCH_NAME} 응답 없음** · $(hostname -s)
+${new_fails}번 연속 확인에 실패했습니다. 이 동안 Grafana 경보가 오지 않을 수 있습니다.
+확인: 개발 VM 접속 여부, \`docker ps\`, OCI 콘솔 인스턴스 상태." || new_alerted=$alerted ;;
+resolved)
+  post "**${WATCH_NAME} 응답 없음** · $(hostname -s) (해소)
+다시 응답합니다." || { new_fails=0; new_alerted=$alerted; } ;;
+esac
+echo "$new_fails $new_alerted" > "$STATE"
+echo "ject-obs-watch: $WATCH_NAME code=$code result=$result fails=$new_fails action=$action"

@@ -23,6 +23,7 @@
 | 백업 실패/오래됨 | 운영 데이터 VM의 `/srv/ject/backup-status/last.json`, 백업 unit 로그, 객체 manifest | 성공 파일 존재와 복원 가능성은 별도. 오래된 백업 임의 삭제 금지 |
 | 접속 기록 업로드 오래됨 | 해당 운영 서버의 `journalctl -u ject-access-log-ship`, timer, textfile 지표, 버킷의 최신 날짜 | 빠진 날짜는 `ject-access-log-ship <날짜>`로 다시 올림. 올라간 파일은 덮어쓰거나 지우지 않음 |
 | 복원 실행 오래됨/지표 누락 | prod-data의 timer·restore-last.json·textfile 수집 확인. 32일 초과·누락·미래 시각·180초 이상 오래된 표본 감시 | 정확한 월별 마감 감시는 아님. 최근 실행만으로 성공 판정 금지, 운영 DB 복원 금지 |
+| Grafana·개발 서버 응답 없음(`ject-obs-watch`) | 개발 VM 접속, `docker ps`의 `ject-obs-*`, OCI 콘솔 인스턴스 상태 | 이 알림은 Grafana 밖에서 온다. 그동안 다른 Grafana 경보는 오지 않았을 수 있으니 복구 뒤 대시보드로 빈 구간을 확인 |
 | 관측 구성요소 중단 | 개발 VM의 Grafana·Loki·Prometheus 상태와 수집 시각 확인 | Grafana 전체 중단은 자기 경보로 발송 불가. OCI 독립 알람 확인 |
 | 지표 전송 실패/로그 폐기 | Alloy 전송 오류·수신측 용량·연결·큐를 제한된 시간대로 조회 | 원본 민감 로그 공유 금지. 손실한 로그가 자동 복구된다고 가정하지 않음 |
 | 복원 시험 실패 | 격리 복원 결과·실패 단계·globals 복원·행 수 검증 | 운영 DB에 복원 금지. 실패 결과를 성공으로 덮어쓰지 않음 |
@@ -35,7 +36,11 @@
 - 실제 적용 확인: Grafana 13.2.4, 기본20개와 선택 FE1개·Redis4개로 규칙25개, 이메일 relay·Discord receiver2개. 각 운영 규칙 자체의 실장애 발동 시험까지 완료한 것은 아니다.
 - 기존 경로는 Grafana → 개발 VM relay → OCI Notifications → 이메일이다.
 - Discord 공식 integration을 병행한다. 11/07 별도 합성규칙의 발생·복구 메시지를 팀 서버상태 채널에서 모두 확인하고 임시규칙은 제거했다. 메시지의 localhost Grafana 링크는 관리자 SSH 터널을 연 상태에서 사용한다.
-- 개발 VM/Grafana가 멈추면 위 경로가 멈춘다. OCI 직접 VM 알람 → ACTIVE 이메일 구독이 별도 경로다. Discord가 이 장애도 독립적으로 전달한다고 주장하지 않는다.
+- 개발 VM/Grafana가 멈추면 위 경로가 멈춘다. OCI 직접 VM 알람 → ACTIVE 이메일 구독이 별도 경로다.
+- 이 경우를 Discord로도 알리려고 `ject-obs-watch.timer`(2분마다)를 둔다. 개발 VM에서는 Grafana(`127.0.0.1:3000/api/health`)를, 운영 앱 VM에서는 개발 VM의 관측 입구(사설 IP 9090)를 확인한다.
+  연속 3번(약 6분) 실패하면 「… 응답 없음」을 보내고, 계속되면 4시간마다 다시, 돌아오면 해소를 보낸다. Grafana를 거치지 않고 웹후크로 직접 보낸다.
+  설정은 각 서버의 `/etc/ject/obs-watch.env`(`WATCH_NAME`, `WATCH_URL`, `WATCH_OK`), 웹후크는 `/srv/ject/secrets/discord_webhook`(root, 0600). 확인: `journalctl -u ject-obs-watch -n 5`.
+- OCI 알람을 Discord로 직접 보내는 길은 없다(2026-11-26 확인: Notifications의 Slack 구독은 `hooks.slack.com` 주소만 받고, 알람 하나에 주제를 하나만 붙일 수 있다).
 - 이메일 구독 생성, ACTIVE, 시험 발송 API 성공, 실제 수신은 각각 다른 검증 단계다.
 
 ## 안전한 검증 순서

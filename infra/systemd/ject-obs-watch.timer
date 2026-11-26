@@ -1,0 +1,11 @@
+[Unit]
+Description=JECT 관측 도구 응답 확인 (2분마다)
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=2min
+AccuracySec=15s
+Unit=ject-obs-watch.service
+
+[Install]
+WantedBy=timers.target
