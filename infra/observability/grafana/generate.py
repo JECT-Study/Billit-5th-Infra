@@ -465,7 +465,7 @@ def overview():
            desc="개발·모니터링 서버가 1분마다 공인 HTTPS 주소에 접속합니다(OCI Health Checks 대신). API는 /readyz(DB·Redis 연결 포함), 웹은 /healthz.")
     b.stat("인증서 남은 기간(가장 짧은 것)", [q('min((probe_ssl_earliest_cert_expiry - time()) / 86400)', "남은 일수")], w=4,
            unit="suffix:일", decimals=0, field={"thresholds": thresholds((None, RED), (14, ORANGE), (30, GREEN))},
-           desc="자동 갱신은 만료 30일 전부터 시도합니다. 14일 미만이면 경보가 울립니다. 지금은 무료 DuckDNS 이름(jectbillit.duckdns.org) 인증서입니다.")
+           desc="자동 갱신은 만료 30일 전부터 시도합니다. 14일 미만이면 경보가 울립니다. 인증서에 든 이름은 운영 앱 서버에서 sudo ject-domain show로 확인합니다.")
     b.stat("마지막 백업 성공 후", [q('time() - ject_backup_last_success_timestamp_seconds', "경과")], w=4,
            unit="s", decimals=1, field={"thresholds": thresholds((None, GREEN), (90000, ORANGE), (93600, RED))},
            desc="운영 DB는 매일 04:00 KST에 백업합니다. 26시간을 넘으면 경보가 울립니다.")

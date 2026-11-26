@@ -36,7 +36,7 @@ prod-app)
   install_access_log_ship
   install_nginx_tools
   install -m 0755 "$SRC/scripts/ject-deploy" "$SRC/scripts/ject-deploy-gate" "$SRC/scripts/ject-deploy-key" /opt/ject/bin/
-  install -m 0755 "$SRC/scripts/ject-cert" /opt/ject/bin/ject-cert
+  install -m 0755 "$SRC/scripts/ject-cert" "$SRC/scripts/ject-domain" /opt/ject/bin/
   install -m 0644 "$SRC/compose/prod-edge.yaml" "$SRC/compose/prod-app.yaml" /opt/ject/compose/
   install -m 0644 "$SRC/systemd/ject-certbot-renew.service" "$SRC/systemd/ject-certbot-renew.timer" /etc/systemd/system/
   docker network inspect ject-prod-net >/dev/null 2>&1 || docker network create ject-prod-net >/dev/null
@@ -64,6 +64,7 @@ prod-data)
 dev)
   install_nginx_tools
   install -m 0755 "$SRC/scripts/ject-deploy" "$SRC/scripts/ject-deploy-gate" "$SRC/scripts/ject-deploy-key" /opt/ject/bin/
+  install -m 0755 "$SRC/scripts/ject-domain" /opt/ject/bin/
   install -m 0644 "$SRC/compose/dev-data.yaml" "$SRC/compose/dev-app.yaml" "$SRC/compose/dev-gateway.yaml" /opt/ject/compose/
   install -m 0755 "$SRC/compose/initdb/10-app-role.sh" /opt/ject/compose/initdb/
   docker network inspect ject-dev-net >/dev/null 2>&1 || docker network create ject-dev-net >/dev/null

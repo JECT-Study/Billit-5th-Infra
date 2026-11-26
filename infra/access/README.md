@@ -51,8 +51,8 @@
   | `APPLE_TEAM_ID`, `APPLE_KEY_ID`, `APPLE_CLIENT_ID` | 애플 client secret 생성과 ID 토큰 `aud` 검증값 |
   | `APPLE_PRIVATE_KEY_BASE64` | 애플 .p8 키 파일 내용을 base64로 한 줄로 만든 값 |
   | `AUTH_TOKEN_ENCRYPTION_KEY` | 애플 refresh token을 DB에 암호화해 저장할 때 쓰는 키(base64 32바이트). 바꾸면 저장된 토큰을 못 읽는다 |
-  | `POLICY_CONTENT_BASE_URL` | 가입 화면 약관 전문 주소의 앞부분(`{값}/{약관 종류}/{버전}`). 지금은 무료 DuckDNS 주소(개발 `https://dev.jectbillit.duckdns.org/terms`, 운영 `https://jectbillit.duckdns.org/terms`)이고 약관 페이지는 아직 없다 |
-  | `TRIP_INVITATION_BASE_URL` | 초대 링크 주소의 앞부분(`{값}/{초대 코드}`). FE 웹 경로 `/invitations/{초대 코드}`에 맞춘다. 지금은 무료 DuckDNS 주소(개발 `https://dev.jectbillit.duckdns.org/invitations`)다 |
+  | `POLICY_CONTENT_BASE_URL` | 가입 화면 약관 전문 주소의 앞부분(`{값}/{약관 종류}/{버전}`). 호스트는 서비스 주소를 따르고 `ject-domain switch`가 바꾼다. 약관 페이지는 아직 없다 |
+  | `TRIP_INVITATION_BASE_URL` | 초대 링크 주소의 앞부분(`{값}/{초대 코드}`). FE 웹 경로 `/invitations/{초대 코드}`에 맞춘다. 호스트는 `ject-domain switch`가 바꾼다 |
   | `GEMINI_API_KEY` | 영수증 인식에 쓰는 Gemini API 키(유료 등급). 없으면 서버는 뜨고 영수증 인식 API만 503을 준다. 모델은 `GEMINI_MODEL`(기본값은 서버 `docs/operations/configuration.md`)로 바꾸고, 엔진 자체는 `RECEIPT_RECOGNITION_PROVIDER`로 고른다 |
 
 노트북에서 붙기: DB·Redis 포트는 인터넷과 Tailscale 어디에도 안 열려 있어서, SSH로 서버를 거쳐 노트북 포트로 넘긴다. 이 명령을 띄운 터미널을 닫으면 끊긴다.

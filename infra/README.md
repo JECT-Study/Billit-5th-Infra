@@ -16,6 +16,7 @@ Billit 서버의 구성, 설치 절차, 모니터링 설정을 정리한다.
 | `scripts/ject-pg-backup` | 운영 DB 일일 백업(04:00 KST) → `ject-db-backups` 버킷, 체크섬·행 수 MANIFEST, 성공 7개 보존, 실패 시 기존 보존 |
 | `scripts/ject-pg-restore-test` | 버킷 백업을 격리 임시 컨테이너(--network none)에 복원해 행 수 비교(매월 1일) |
 | `scripts/ject-cert` | Let's Encrypt 발급·갱신(webroot), 갱신 시에만 Nginx 재적용 |
+| `scripts/ject-domain` | 서비스 주소 확인(`show`)·발급 시험(`check`)·전환(`switch`). 옛 이름은 남긴다 |
 | `scripts/render-nginx.sh` | 인증서 유무에 따라 Nginx 설정 생성. 관리 경로(/actuator 등) 차단, 쿼리 문자열 없는 JSON 접근 로그 |
 | `scripts/ject-user` | 개발자 계정 추가·잠금(공개키 검사, 개인키 거부) |
 | `scripts/ject-deploy-gate` | `deploy` 계정의 SSH 강제 명령. `ject-deploy deploy|rollback|status <이 VM의 환경> ...`만 검사 후 sudo로 실행(셸·포워딩·주입 불가) |
@@ -55,7 +56,8 @@ sshd는 키 로그인만, `AllowGroups ject-admins deploy`, `MaxAuthTries 3`.
 4. 앱 VM: 데이터 VM의 앱 DB·Redis 비밀값을 표준입력으로 `setup-secrets.sh prod-app-env <데이터 사설IP>`에 전달(화면 출력 없음) → `render-nginx.sh edge` → `ject-edge` 기동 → `ject-deploy deploy prod be <image@digest>`.
 5. 개발 VM: `setup-secrets.sh dev`, `dev-app-env` → `ject-dev-data`, `ject-dev-gateway` 기동 → `ject-deploy deploy dev be ...`. 운영 Nginx의 `DEV_UPSTREAM=<개발 사설IP>:8080`.
 6. CI: 환경별 배포 키 공개키를 `ject-deploy-key install <pub> <Bastion 사설 IP>`(운영 앱·개발 VM) → GitHub Environment 비밀값(`github-workflows/README.md`).
-7. 도메인이 생기면 `/srv/ject/app/edge.env`에 `PROD_DOMAIN`, `DEV_DOMAIN` → DNS A 레코드 → `ject-cert issue`. 이름을 바꿀 때는 새 이름 뒤에 옛 이름을 공백으로 남기면 전환 중에도 둘 다 동작한다(첫 이름이 대표).
+7. 서비스 주소: DNS A 레코드(운영 이름, `dev.` 개발 이름) → 운영 앱 VM `sudo ject-domain check <운영 이름>`(스테이징 발급 시험) → 운영 앱 VM `sudo ject-domain switch <운영 이름>` → 개발 VM `sudo ject-domain switch <운영 이름>`.
+   새 이름이 대표가 되고 옛 이름은 인증서·Nginx에 남아 옛 주소로 빌드한 앱도 계속 동작한다. 운영 앱 VM은 `edge.env`·인증서·`prod-be-auth.env`의 기준 주소를, 개발 VM은 `dev-be-auth.env`의 기준 주소와 외부 감시 주소(`obs.env`)를 바꾸고 BE를 같은 이미지로 다시 띄운다. 지금 값은 `sudo ject-domain show`.
 8. 백업: `systemctl start ject-pg-backup` → `ject-pg-restore-test latest` 성공 확인.
 
 ## 모니터링
