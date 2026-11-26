@@ -1,0 +1,11 @@
+[Unit]
+Description=JECT OCI 알람 상태를 Discord로 전달
+After=network-online.target
+Wants=network-online.target
+ConditionPathExists=/srv/ject/secrets/discord_webhook
+ConditionPathExists=/opt/ject/oci-cli/bin/oci
+
+[Service]
+Type=oneshot
+ExecStart=/opt/ject/bin/ject-oci-alarm-watch
+TimeoutStartSec=120

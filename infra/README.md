@@ -22,7 +22,7 @@ Billit 서버의 구성, 설치 절차, 모니터링 설정을 정리한다.
 | `scripts/ject-deploy-gate` | `deploy` 계정의 SSH 강제 명령. `ject-deploy deploy|rollback|status <이 VM의 환경> ...`만 검사 후 sudo로 실행(셸·포워딩·주입 불가) |
 | `scripts/ject-deploy-key` | 환경별 CI 배포 공개키를 `deploy` 계정에 등록(`from="<Bastion IP>",restrict,command="ject-deploy-gate"`) |
 | `compose/` | `prod-edge`(Nginx·Certbot), `prod-app`(앱), `prod-data`(PostgreSQL 17.11·Redis 7.4.11), `dev-*`(개발 앱·DB·게이트웨이) |
-| `systemd/` | 백업·복원 시험·인증서 갱신 타이머, 백업 결과 지표(`ject-backup-metrics`), 알림 중계(`ject-alert-relay`), Grafana·개발 VM 응답 확인(`ject-obs-watch`) |
+| `systemd/` | 백업·복원 시험·인증서 갱신 타이머, 백업 결과 지표(`ject-backup-metrics`), 알림 중계(`ject-alert-relay`), Grafana·개발 VM 응답 확인(`ject-obs-watch`), OCI 알람의 Discord 전달(`ject-oci-alarm-watch`) |
 | `oci/monitoring.tf` | 알림 주제 `ject-alerts`·이메일 구독, VM 응답 없음(3)·메모리 90% 알람, 개발 VM의 발행 권한 |
 | `observability/` | Prometheus·Loki·Alloy(공통·앱·관측) 설정, obs-gateway(쓰기 전용), 알림 중계기, Grafana 프로비저닝(`grafana/generate.py`로 규칙·대시보드 생성) |
 | `compose/agent.yaml`, `compose/obs.yaml` | 수집기(3대: Node Exporter·Alloy), 관측 스택(개발 VM: Prometheus·Loki·Grafana·obs-gateway) |

@@ -1,0 +1,63 @@
+#!/usr/bin/env python3
+"""OCI 알람 상태가 바뀌면 Discord로 알린다(운영 앱 VM, root, ject-oci-alarm-watch.timer가 2분마다 실행).
+
+OCI Notifications는 Discord 웹후크를 받지 않고 알람 하나에 주제를 하나만 붙일 수 있어, 메일과 별도로
+이 서버가 인스턴스 권한(read alarms)으로 알람 상태를 읽어 전달한다. Grafana가 죽어 있어도 동작한다.
+울리기 시작한 알람과 해소된 알람만 한 번씩 알린다(반복 알림은 OCI 메일이 4시간마다 보낸다).
+OCI 조회나 Discord 전송이 실패하면 상태 파일을 바꾸지 않아 다음 실행에서 다시 시도한다.
+"""
+import json
+import subprocess
+import sys
+import urllib.request
+from pathlib import Path
+
+OCI = '/opt/ject/oci-cli/bin/oci'
+STATE = Path('/var/lib/ject/oci-alarm-watch.json')
+WEBHOOK_FILE = Path('/srv/ject/secrets/discord_webhook')
+METADATA = 'http://169.254.169.254/opc/v2/instance/'
+
+
+def changes(previous, statuses):
+    """이전에 울리던 알람 이름들과 지금 상태로 (새로 울린 것, 해소된 것, 지금 울리는 것)을 구한다."""
+    firing = sorted(name for name, status in statuses.items() if status == 'FIRING')
+    started = [name for name in firing if name not in previous]
+    # 목록에서 사라진 알람은 해소로 보지 않는다(지워졌거나 조회가 일부만 온 경우).
+    resolved = sorted(name for name in previous if statuses.get(name) == 'OK')
+    still = sorted(name for name in previous if name not in statuses)
+    return started, resolved, sorted(set(firing) | set(still))
+
+
+def message(started, resolved, severity):
+    lines = [f'**OCI 알람: {name}** ({severity.get(name, "")})\nOCI가 직접 보고한 알람입니다. Grafana와 별개로 옵니다. 확인: OCI 콘솔 인스턴스 상태, 서버 접속 여부.'
+             for name in started]
+    lines += [f'**OCI 알람: {name}** (해소)' for name in resolved]
+    return '\n\n'.join(lines)
+
+
+def main():
+    request = urllib.request.Request(METADATA, headers={'Authorization': 'Bearer Oracle'})
+    compartment = json.load(urllib.request.urlopen(request, timeout=5))['compartmentId']
+    out = subprocess.run([OCI, '--auth', 'instance_principal', 'monitoring', 'alarm-status', 'list-alarms-status',
+                          '--compartment-id', compartment, '--all'], capture_output=True, text=True, timeout=60)
+    if out.returncode != 0:
+        print('ject-oci-alarm-watch: 알람 조회 실패', out.stderr.strip()[-200:], file=sys.stderr)
+        return 1
+    alarms = json.loads(out.stdout or '{"data": []}')['data']
+    statuses = {a['display-name']: a['status'] for a in alarms}
+    severity = {a['display-name']: a['severity'] for a in alarms}
+    previous = json.loads(STATE.read_text()) if STATE.exists() else []
+    started, resolved, firing = changes(previous, statuses)
+    if started or resolved:
+        body = json.dumps({'content': message(started, resolved, severity)}).encode()
+        post = urllib.request.Request(WEBHOOK_FILE.read_text().strip(), data=body,
+                                      headers={'Content-Type': 'application/json', 'User-Agent': 'ject-oci-alarm-watch'})
+        urllib.request.urlopen(post, timeout=10)
+    STATE.parent.mkdir(parents=True, exist_ok=True)
+    STATE.write_text(json.dumps(firing))
+    print(f'ject-oci-alarm-watch: alarms={len(statuses)} firing={len(firing)} started={len(started)} resolved={len(resolved)}')
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main())

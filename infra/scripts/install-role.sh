@@ -40,10 +40,19 @@ install_obs_watch() {
   systemctl enable --now ject-obs-watch.timer >/dev/null
 }
 
+# 운영 앱 VM: OCI 알람 상태를 읽어 Discord로 전달한다(인스턴스 권한 read alarms, oci/storage_iam.tf).
+install_oci_alarm_watch() {
+  install -m 0755 "$SRC/scripts/ject-oci-alarm-watch" /opt/ject/bin/
+  install -m 0644 "$SRC/systemd/ject-oci-alarm-watch."{service,timer} /etc/systemd/system/
+  systemctl daemon-reload
+  systemctl enable --now ject-oci-alarm-watch.timer >/dev/null
+}
+
 case "$ROLE" in
 prod-app)
   install_access_log_ship
   install_obs_watch
+  install_oci_alarm_watch
   install_nginx_tools
   install -m 0755 "$SRC/scripts/ject-deploy" "$SRC/scripts/ject-deploy-gate" "$SRC/scripts/ject-deploy-key" /opt/ject/bin/
   install -m 0755 "$SRC/scripts/ject-cert" "$SRC/scripts/ject-domain" /opt/ject/bin/

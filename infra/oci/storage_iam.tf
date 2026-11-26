@@ -22,8 +22,8 @@ resource "oci_objectstorage_bucket" "b" {
   access_type    = "NoPublicAccess"
   storage_tier   = "Standard"
   # 상태 파일 사본은 같은 이름으로 덮어 올리므로 이전 판을 남긴다.
-  versioning     = each.key == "ject-tfstate" ? "Enabled" : "Disabled"
-  freeform_tags  = merge(local.tags, { purpose = each.value })
+  versioning    = each.key == "ject-tfstate" ? "Enabled" : "Disabled"
+  freeform_tags = merge(local.tags, { purpose = each.value })
 }
 
 # 취급자 접속 기록은 팀 개인정보 내부 관리계획대로 1년 보관한다. 서버에는 삭제 권한이 없으므로 수명 주기 규칙이 지운다.
@@ -77,6 +77,8 @@ resource "oci_identity_policy" "instances" {
     # 운영 앱 VM: 운영 업로드 버킷만
     "Allow dynamic-group ${oci_identity_dynamic_group.vm["ject-prod-app"].name} to read buckets in compartment JECT where target.bucket.name = 'ject-prod-uploads'",
     "Allow dynamic-group ${oci_identity_dynamic_group.vm["ject-prod-app"].name} to manage objects in compartment JECT where target.bucket.name = 'ject-prod-uploads'",
+    # OCI 알람 상태를 읽어 Discord로 알린다(ject-oci-alarm-watch). 읽기만 준다.
+    "Allow dynamic-group ${oci_identity_dynamic_group.vm["ject-prod-app"].name} to read alarms in compartment JECT",
     # 개발 VM: 개발 업로드 버킷만 (운영 버킷·백업 접근 불가)
     "Allow dynamic-group ${oci_identity_dynamic_group.vm["ject-dev-obs"].name} to read buckets in compartment JECT where target.bucket.name = 'ject-dev-uploads'",
     "Allow dynamic-group ${oci_identity_dynamic_group.vm["ject-dev-obs"].name} to manage objects in compartment JECT where target.bucket.name = 'ject-dev-uploads'",

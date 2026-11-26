@@ -1,0 +1,11 @@
+[Unit]
+Description=JECT OCI 알람 상태 확인 (2분마다)
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=2min
+AccuracySec=15s
+Unit=ject-oci-alarm-watch.service
+
+[Install]
+WantedBy=timers.target
