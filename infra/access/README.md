@@ -37,6 +37,7 @@
 | 운영 | `ject-prod-data` | `ject` | `ject_app` | `ject_admin` |
 
 - 앱 계정은 자기 DB의 주인이다. 테이블을 만들고 고칠 수 있고(Flyway 포함), 다른 DB는 못 본다. 관리자 계정은 계정·DB 생성까지 전부 된다.
+- 운영 DB에는 사람(BE)마다 읽기 전용 계정이 있다. 아이디는 서버 계정과 같고 비밀번호는 `sudo cat /srv/ject/secrets/pg_person_<아이디>_password`로 본다. 운영 데이터를 볼 때는 이 계정을 쓰고, 쓰기가 필요한 관리 작업만 `ject_admin`으로 한다. 두 계정 모두 실행한 SQL이 기록된다(아래 「접속 기록과 분기 점검」).
 - Redis는 계정 없이 비밀번호 하나다.
 - 비밀번호는 해당 서버에서 `sudo cat /srv/ject/secrets/<파일>`로 본다. 앱 계정 `pg_app_password`, 관리자 `pg_admin_password`, Redis `redis_password`.
 - 배포할 때는 서버가 앱에 접속값을 넣어 준다(`/srv/ject/secrets/dev-be.env`, `prod-be.env`). yml이나 코드에 비밀번호를 적지 않는다.
@@ -82,7 +83,27 @@ DB 툴(DBeaver, DataGrip 등)에는 호스트 `127.0.0.1`, 포트 `25432`(개발
    ```
 3. Tailscale 콘솔 → Users → Invite users → 이메일 입력.
 4. 본인이 `ssh <username>@ject-dev` 되는지 확인받기.
-5. 나갈 때: 7일 안에 계정이 있는 서버마다 `sudo ject-user lock <username>`, Tailscale 콘솔에서 사용자 제거. 그 사람이 볼 수 있던 DB·Redis 비밀번호와 외부 API 키를 교체하고 `team.yaml`에 회수일을 적는다(팀 개인정보 내부 관리계획 3.1).
+5. 운영 서버 계정을 만든 BE는 운영 DB 계정도 만든다: `ssh seongju@ject-prod-data 'sudo ject-db-person add <username>'`.
+6. 나갈 때: 7일 안에 계정이 있는 서버마다 `sudo ject-user lock <username>`, Tailscale 콘솔에서 사용자 제거, 운영 DB 계정은 `sudo ject-db-person lock <username>`. 그 사람이 볼 수 있던 DB·Redis 비밀번호와 외부 API 키를 교체하고 `team.yaml`에 회수일을 적는다(팀 개인정보 내부 관리계획 3.1).
+
+## 접속 기록과 분기 점검
+
+팀 「개인정보 내부 관리계획」에 따라 운영 서버 2대의 취급자 접속 기록을 1년 보관한다.
+
+| 기록 | 남기는 곳 | 올리는 것 |
+| --- | --- | --- |
+| SSH 로그인, sudo 명령 | 서버 journald(`_COMM=sshd`, `SYSLOG_IDENTIFIER=sudo`) | 운영 앱·운영 데이터 |
+| 운영 DB 접속·종료, 사람 계정(`ject_admin`, `ject_person` 구성원)이 실행한 SQL | PostgreSQL 로그(`log_connections`, `log_disconnections`, 역할별 `log_statement=all`) | 운영 데이터 |
+
+- `ject-access-log-ship.timer`가 매일 00:30(KST)에 전날치를 `ject-access-logs` 버킷의 `<서버>/<연도>/<날짜>.log.gz`로 올린다. 앱 계정(`ject_app`)의 SQL은 담지 않는다.
+- 서버에는 이 버킷의 생성 권한만 있어 지난 파일을 읽거나 지우거나 덮어쓰지 못한다. 365일이 지난 파일은 버킷 수명 주기 규칙이 지운다.
+- 하루치를 다시 만들 수는 없으니(덮어쓰기 금지) 실패하면 `sudo journalctl -u ject-access-log-ship`으로 원인을 보고 `sudo ject-access-log-ship <날짜>`로 그날치를 올린다. 서버 journald는 약 5주, PostgreSQL 컨테이너 로그는 30MB까지만 남는다.
+- 분기 점검(출시 전 1회, 이후 분기 1회): 관리자 PC에서 그 분기 파일을 받아 새벽 대량 조회, 등록되지 않은 계정·기기의 접속, 운영 DB 내려받기(`COPY`, `pg_dump`)가 있는지 보고 결과를 팀 Notion 점검 기록에 남긴다.
+
+```sh
+oci os object list --profile JECT --auth security_token -bn ject-access-logs --prefix ject-prod-data/2026/ --query 'data[].name'
+oci os object get --profile JECT --auth security_token -bn ject-access-logs --name ject-prod-data/2026/2026-11-25.log.gz --file - | gzip -dc | less
+```
 
 ## 비상용: Bastion (Tailscale이 안 될 때)
 

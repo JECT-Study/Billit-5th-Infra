@@ -1,0 +1,11 @@
+[Unit]
+Description=JECT 취급자 접속 기록 업로드 (매일 00:30 KST, 전날치)
+
+[Timer]
+OnCalendar=*-*-* 00:30:00 Asia/Seoul
+Persistent=true
+RandomizedDelaySec=10min
+Unit=ject-access-log-ship.service
+
+[Install]
+WantedBy=timers.target

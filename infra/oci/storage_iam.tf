@@ -9,6 +9,7 @@ locals {
     "ject-prod-uploads" = "운영 업로드 파일"
     "ject-dev-uploads"  = "개발 업로드 파일"
     "ject-db-backups"   = "운영 PostgreSQL 일일 백업"
+    "ject-access-logs"  = "운영 서버·DB 취급자 접속 기록(1년 보관)"
   }
 }
 
@@ -21,6 +22,31 @@ resource "oci_objectstorage_bucket" "b" {
   storage_tier   = "Standard"
   versioning     = "Disabled"
   freeform_tags  = merge(local.tags, { purpose = each.value })
+}
+
+# 취급자 접속 기록은 팀 개인정보 내부 관리계획대로 1년 보관한다. 서버에는 삭제 권한이 없으므로 수명 주기 규칙이 지운다.
+resource "oci_identity_policy" "objectstorage_lifecycle" {
+  compartment_id = oci_identity_compartment.ject.id
+  name           = "ject-objectstorage-lifecycle"
+  description    = "Object Storage 수명 주기 규칙이 JECT 버킷의 기간이 지난 객체를 지우도록 허용"
+  statements = [
+    "Allow service objectstorage-${var.region} to manage object-family in compartment JECT",
+  ]
+  freeform_tags = local.tags
+}
+
+resource "oci_objectstorage_object_lifecycle_policy" "access_logs" {
+  namespace = data.oci_objectstorage_namespace.ns.namespace
+  bucket    = oci_objectstorage_bucket.b["ject-access-logs"].name
+  rules {
+    name        = "delete-after-365-days"
+    action      = "DELETE"
+    is_enabled  = true
+    target      = "objects"
+    time_amount = 365
+    time_unit   = "DAYS"
+  }
+  depends_on = [oci_identity_policy.objectstorage_lifecycle]
 }
 
 # ---- 인스턴스별 동적 그룹 ----------------------------------------------------
@@ -43,6 +69,9 @@ resource "oci_identity_policy" "instances" {
     # 남은 위험: 데이터 VM이 탈취되면 백업 삭제가 가능하다(보존 정리를 위해 필요한 권한).
     "Allow dynamic-group ${oci_identity_dynamic_group.vm["ject-prod-data"].name} to read buckets in compartment JECT where target.bucket.name = 'ject-db-backups'",
     "Allow dynamic-group ${oci_identity_dynamic_group.vm["ject-prod-data"].name} to manage objects in compartment JECT where all {target.bucket.name = 'ject-db-backups', any {request.permission = 'OBJECT_CREATE', request.permission = 'OBJECT_INSPECT', request.permission = 'OBJECT_READ', request.permission = 'OBJECT_DELETE'}}",
+    # 운영 VM 2대: 취급자 접속 기록 버킷에 하루치 파일 생성만. 읽기·삭제·덮어쓰기는 없어서 서버가 탈취돼도 지난 기록을 지우거나 바꾸지 못한다.
+    "Allow dynamic-group ${oci_identity_dynamic_group.vm["ject-prod-data"].name} to manage objects in compartment JECT where all {target.bucket.name = 'ject-access-logs', any {request.permission = 'OBJECT_CREATE', request.permission = 'OBJECT_INSPECT'}}",
+    "Allow dynamic-group ${oci_identity_dynamic_group.vm["ject-prod-app"].name} to manage objects in compartment JECT where all {target.bucket.name = 'ject-access-logs', any {request.permission = 'OBJECT_CREATE', request.permission = 'OBJECT_INSPECT'}}",
     # 운영 앱 VM: 운영 업로드 버킷만
     "Allow dynamic-group ${oci_identity_dynamic_group.vm["ject-prod-app"].name} to read buckets in compartment JECT where target.bucket.name = 'ject-prod-uploads'",
     "Allow dynamic-group ${oci_identity_dynamic_group.vm["ject-prod-app"].name} to manage objects in compartment JECT where target.bucket.name = 'ject-prod-uploads'",

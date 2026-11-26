@@ -1,0 +1,10 @@
+[Unit]
+Description=JECT 취급자 접속 기록 하루치 업로드 (Object Storage, 1년 보관)
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/ject/bin/ject-access-log-ship
+Nice=10
+TimeoutStartSec=30min

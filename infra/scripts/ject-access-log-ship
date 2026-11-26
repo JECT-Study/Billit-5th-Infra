@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+# 운영 서버의 취급자 접속 기록을 하루치 파일로 비공개 버킷(ject-access-logs)에 올린다(root).
+#   ject-access-log-ship [YYYY-MM-DD]   기본은 어제(KST)
+# 서버 SSH 로그인·sudo 기록과, 운영 데이터 서버면 사람 DB 계정의 접속·조회 기록을 담는다.
+# 서버에는 이 버킷의 생성 권한만 있어 지난 파일을 지우거나 덮어쓰지 못한다. 1년 보관은 버킷 수명 주기 규칙이 지운다.
+set -euo pipefail
+[ "$(id -u)" -eq 0 ] || { echo "root로 실행" >&2; exit 1; }
+export TZ=Asia/Seoul
+DAY="${1:-$(date -d yesterday +%F)}"
+[[ "$DAY" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || { echo "날짜 형식: YYYY-MM-DD" >&2; exit 1; }
+NEXT=$(date -d "$DAY +1 day" +%F)
+BUCKET="${BUCKET:-ject-access-logs}"
+OCI="${OCI:-/opt/ject/oci-cli/bin/oci}"
+PG=ject-prod-data-postgres-1
+HOST=$(hostname -s)
+WORK=$(mktemp -d); trap 'rm -rf "$WORK"' EXIT
+out="$WORK/$HOST-$DAY.log"
+
+{
+  echo "# host=$HOST day=$DAY tz=$TZ generated=$(date -Iseconds)"
+  echo "## sshd, sudo"
+  journalctl --since "$DAY 00:00:00" --until "$NEXT 00:00:00" -o short-iso --no-pager _COMM=sshd + SYSLOG_IDENTIFIER=sudo || true
+  if docker ps --format '{{.Names}}' | grep -qx "$PG"; then
+    # 사람 계정은 관리자(ject_admin)와 ject_person 역할의 구성원이다. 앱 계정(ject_app)의 기록은 담지 않는다.
+    people=$(docker exec "$PG" psql -U ject_admin -d postgres -tAc \
+      "select string_agg(r.rolname, '|') from pg_roles r where r.rolname = 'ject_admin' or r.oid in (select m.member from pg_auth_members m join pg_roles g on g.oid = m.roleid where g.rolname = 'ject_person')")
+    echo "## postgres (${people})"
+    docker logs --since "$(date -d "$DAY" -Iseconds)" --until "$(date -d "$NEXT" -Iseconds)" "$PG" 2>&1 \
+      | grep -E "user=(${people})[ ,]" || true
+  fi
+} > "$out"
+
+gzip -9 "$out"
+NS=$("$OCI" --auth instance_principal os ns get --query data --raw-output)
+"$OCI" --auth instance_principal os object put -ns "$NS" -bn "$BUCKET" \
+  --name "$HOST/${DAY:0:4}/$DAY.log.gz" --file "$out.gz" --no-overwrite >/dev/null
+echo "ok: $HOST/${DAY:0:4}/$DAY.log.gz $(stat -c %s "$out.gz") bytes"

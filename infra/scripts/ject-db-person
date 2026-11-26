@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+# 운영 DB의 사람별 계정 관리(root, ject-prod-data). 팀 개인정보 내부 관리계획: 공용 계정 금지, 접속·조회 기록 1년 보관.
+#   ject-db-person add <username>    읽기 전용 계정 생성 또는 비밀번호 재발급. 비밀번호는 /srv/ject/secrets/pg_person_<username>_password
+#   ject-db-person lock <username>   로그인 막기(계정·기록은 남긴다)
+#   ject-db-person list
+# 사람 계정은 ject_person 역할의 구성원이고 모든 SQL을 로그로 남긴다(ject-access-log-ship이 하루치를 올린다).
+# 쓰기가 필요한 관리 작업은 ject_admin으로 하고, ject_admin의 SQL도 모두 남긴다.
+set -euo pipefail
+[ "$(id -u)" -eq 0 ] || { echo "root로 실행" >&2; exit 1; }
+PG=ject-prod-data-postgres-1
+cmd="${1:-}"; user="${2:-}"
+psql_() { docker exec -i "$PG" psql -v ON_ERROR_STOP=1 -U ject_admin -d postgres -q "$@"; }
+valid_user() { [[ "$1" =~ ^[a-z][a-z0-9_]{1,30}$ ]] && [[ "$1" != ject_* ]] && [[ "$1" != pg_* ]] && [ "$1" != postgres ]; }
+ensure_base() {
+  psql_ <<'SQL'
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'ject_person') THEN CREATE ROLE ject_person NOLOGIN; END IF;
+END $$;
+GRANT pg_read_all_data TO ject_person;
+GRANT CONNECT ON DATABASE ject TO ject_person;
+ALTER ROLE ject_admin SET log_statement = 'all';
+SQL
+}
+case "$cmd" in
+add)
+  valid_user "$user" || { echo "잘못된 사용자 이름: $user" >&2; exit 1; }
+  ensure_base
+  pw=$(head -c 48 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | cut -c1-32)
+  file="/srv/ject/secrets/pg_person_${user}_password"
+  # 비밀번호가 든 SQL이 로그와 접속 기록에 남지 않게 이 세션만 SQL·오류 문장 기록을 끈다.
+  psql_ <<SQL
+SET log_statement = 'none';
+SET log_min_error_statement = 'panic';
+DO \$\$ BEGIN
+  IF EXISTS (SELECT FROM pg_roles WHERE rolname = '${user}') THEN
+    ALTER ROLE "${user}" WITH LOGIN PASSWORD '${pw}';
+  ELSE
+    CREATE ROLE "${user}" WITH LOGIN PASSWORD '${pw}' IN ROLE ject_person;
+  END IF;
+END \$\$;
+ALTER ROLE "${user}" SET log_statement = 'all';
+SQL
+  install -m 0600 -o root -g root /dev/null "$file"
+  printf '%s' "$pw" > "$file"
+  echo "ok: $user (비밀번호 $file)" ;;
+lock)
+  valid_user "$user" || exit 1
+  psql_ -c "ALTER ROLE \"${user}\" NOLOGIN"
+  rm -f "/srv/ject/secrets/pg_person_${user}_password"
+  echo "locked: $user" ;;
+list)
+  psql_ -tAc "select r.rolname || ' ' || case when r.rolcanlogin then 'login' else 'locked' end from pg_roles r join pg_auth_members m on m.member = r.oid join pg_roles g on g.oid = m.roleid where g.rolname = 'ject_person' order by 1" ;;
+*) echo "usage: ject-db-person add|lock|list" >&2; exit 2 ;;
+esac

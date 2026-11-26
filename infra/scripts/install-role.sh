@@ -19,8 +19,21 @@ install_nginx_tools() {
   install -m 0644 "$SRC/nginx/nginx.conf" /opt/ject/nginx/nginx.conf
 }
 
+# 운영 2대: 취급자 접속 기록(SSH·sudo, 운영 DB 사람 계정)을 매일 ject-access-logs 버킷에 올린다(팀 개인정보 내부 관리계획, 1년 보관).
+install_access_log_ship() {
+  install -m 0755 "$SRC/scripts/ject-access-log-ship" /opt/ject/bin/
+  install -m 0644 "$SRC/systemd/ject-access-log-ship."{service,timer} /etc/systemd/system/
+  if [ ! -x /opt/ject/oci-cli/bin/oci ]; then
+    python3 -m venv /opt/ject/oci-cli
+    /opt/ject/oci-cli/bin/pip install -q --upgrade pip oci-cli
+  fi
+  systemctl daemon-reload
+  systemctl enable --now ject-access-log-ship.timer >/dev/null
+}
+
 case "$ROLE" in
 prod-app)
+  install_access_log_ship
   install_nginx_tools
   install -m 0755 "$SRC/scripts/ject-deploy" "$SRC/scripts/ject-deploy-gate" "$SRC/scripts/ject-deploy-key" /opt/ject/bin/
   install -m 0755 "$SRC/scripts/ject-cert" /opt/ject/bin/ject-cert
@@ -32,6 +45,8 @@ prod-app)
   systemctl daemon-reload
   systemctl enable --now ject-certbot-renew.timer >/dev/null ;;
 prod-data)
+  install_access_log_ship
+  install -m 0755 "$SRC/scripts/ject-db-person" /opt/ject/bin/
   install -m 0755 "$SRC/scripts/ject-pg-backup" "$SRC/scripts/ject-pg-restore-test" /opt/ject/bin/
   install -m 0644 "$SRC/compose/prod-data.yaml" /opt/ject/compose/
   install -m 0755 "$SRC/compose/initdb/10-app-role.sh" /opt/ject/compose/initdb/
