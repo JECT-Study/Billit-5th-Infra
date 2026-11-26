@@ -74,7 +74,7 @@ DB 툴(DBeaver, DataGrip 등)에는 호스트 `127.0.0.1`, 포트 `25432`(개발
 ## 계정 관리
 
 1. 공개키를 `.local/ject-access/<username>.pub`에 저장하고 `team.yaml`의 상태를 고친다(이메일은 파일에 적지 않는다). username은 팀원이 지정한 영문 소문자 아이디를 사용한다.
-2. 서버 3대에서 계정 생성(공개키는 표준입력으로 넘긴다)
+2. 계정 생성(공개키는 표준입력으로 넘긴다). 운영 서버 2대(`ject-prod-app`·`ject-prod-data`)에는 개인정보 취급자인 BE만 만들고, FE는 `ject-dev`에만 만든다(팀 개인정보 내부 관리계획 3.1 최소 인원).
    ```sh
    for h in ject-dev ject-prod-app ject-prod-data; do
      ssh seongju@$h 'f=$(mktemp); cat > "$f"; sudo ject-user add <username> "$f" "<이름>"; rm -f "$f"' < .local/ject-access/<username>.pub
@@ -82,7 +82,7 @@ DB 툴(DBeaver, DataGrip 등)에는 호스트 `127.0.0.1`, 포트 `25432`(개발
    ```
 3. Tailscale 콘솔 → Users → Invite users → 이메일 입력.
 4. 본인이 `ssh <username>@ject-dev` 되는지 확인받기.
-5. 나갈 때: `sudo ject-user lock <username>` 3대 + Tailscale 콘솔에서 사용자 제거.
+5. 나갈 때: 7일 안에 계정이 있는 서버마다 `sudo ject-user lock <username>`, Tailscale 콘솔에서 사용자 제거. 그 사람이 볼 수 있던 DB·Redis 비밀번호와 외부 API 키를 교체하고 `team.yaml`에 회수일을 적는다(팀 개인정보 내부 관리계획 3.1).
 
 ## 비상용: Bastion (Tailscale이 안 될 때)
 

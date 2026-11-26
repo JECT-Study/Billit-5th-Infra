@@ -1,7 +1,8 @@
 # JECT 개발자 서버 접근 대상(PM·디자이너 제외). 절차는 access/README.md.
 # 공개키는 본인이 만든 것만 받는다(개인키를 대신 만들거나 받지 않는다).
 # public_key: 받은 공개키 파일 경로(관리자 맥 .local/ject-access/<username>.pub, 저장소에 올리지 않음)
-# server_account: 서버 3대 계정 생성일(sudo, ject-admins). tailscale: 초대 상태. 이메일은 이 파일에 적지 않는다.
+# server_account: 계정 생성일(sudo, ject-admins). tailscale: 초대 상태. 이메일은 이 파일에 적지 않는다.
+# 운영 서버 2대(ject-prod-app·ject-prod-data)는 개인정보 취급자인 BE만 둔다(팀 개인정보 내부 관리계획). FE는 개발 서버만.
 members:
   - username: seongju
     role: BE (인프라 담당, 관리자)
@@ -22,9 +23,11 @@ members:
     role: FE 리더
     public_key: .local/ject-access/dana.pub   # SHA256:QCmoV8Wgd5F/dHx2dbRPGSuGAKorYbB3ZxwLDvHVZaY
     server_account: 2026-11-12   # 3대 생성·키 지문 확인, 본인 접속 미확인
+    prod_access: 2026-11-26 회수(ject-user lock, 운영 2대 접속 기록 없음). 개발 서버만 유지
     tailscale: 초대 수락·관리자 승인(2026-11-13)
   - username: minseo
     role: FE
     public_key: .local/ject-access/minseo.pub
     server_account: 2026-11-07   # 3대 키 지문·소유자·권한 확인, ject-dev 본인 접속 확인(2026-11-12)
+    prod_access: 2026-11-26 회수(ject-user lock, 운영 2대 접속 기록 없음). 개발 서버만 유지
     tailscale: 접속 확인(2026-11-12)
