@@ -105,8 +105,13 @@ Explore의 합성 trace ID 조회를 확인한다. Grafana는 기존 SSH 터널�
 0.30에서는 agent를 붙이면 컨테이너 상태 검사(시작 120초 + 재시도 30초)와 배포 대기(180초)를 넘겨 배포가 실패한다.
 그래서 개발 BE의 CPU 한도를 0.50으로 올리고 계측은 Tomcat·Spring MVC·JDBC·Lettuce·HTTP 클라이언트만 켰다.
 메모리는 agent 없이 약 410MiB, 붙이면 약 470MiB다(상한 1024MiB).
-상태 확인(`/healthz`, `/readyz`)과 지표 수집(`/actuator/prometheus`) 요청도 trace로 들어온다.
-Grafana Explore에서는 `{resource.service.name="billit-be" && span.http.route=~"/api/.*"}`로 거른다.
+상태 확인(`/healthz`, `/readyz`)과 지표 수집(`/actuator/prometheus`) 요청이 낀 trace는 collector가 통째로 버린다(5초 모아서 trace 단위로 판단).
+Grafana Explore에서는 `{resource.service.name="billit-be"}`로 본다.
+
+로그와 추적은 서로 넘어갈 수 있다. agent가 로그 JSON에 `trace_id`를 넣는다(`OTEL_INSTRUMENTATION_LOGBACK_MDC_ENABLED=true`).
+- 로그 → 추적: Loki 데이터 소스의 derived field(`provisioning/datasources/ject.yaml`). 로그 줄을 펼치면 「추적 보기」가 나온다.
+- 추적 → 로그: Tempo 데이터 소스의 `tracesToLogsV2`(`tempo-datasource.yaml`). span에서 같은 `trace_id`가 찍힌 개발 BE 로그를 연다.
+추적 보관은 6시간이라 그보다 오래된 로그의 링크는 열리지 않는다.
 
 ## 검증과 롤백
 

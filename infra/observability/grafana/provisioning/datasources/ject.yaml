@@ -16,3 +16,11 @@ datasources:
     access: proxy
     url: http://127.0.0.1:3100
     editable: false
+    jsonData:
+      # 개발 BE 로그의 trace_id에서 Tempo 추적으로 넘어간다(추적 저장소는 선택 설치, observability/otel).
+      derivedFields:
+        - name: trace_id
+          matcherRegex: '"trace_id":"(\w+)"'
+          datasourceUid: ject-tempo-dev
+          url: '$${__value.raw}'
+          urlDisplayLabel: 추적 보기

@@ -8,3 +8,11 @@ datasources:
     url: http://127.0.0.1:3200
     isDefault: false
     editable: false
+    jsonData:
+      # 추적에서 같은 trace_id가 찍힌 개발 BE 로그로 넘어간다.
+      tracesToLogsV2:
+        datasourceUid: loki
+        spanStartTimeShift: '-5m'
+        spanEndTimeShift: '5m'
+        customQuery: true
+        query: '{host="dev", service="be"} |= "$${__trace.traceId}"'

@@ -36,6 +36,26 @@ otelcol.processor.filter "reject_links" {
     spanevent = [`true`]
   }
   output {
+    traces = [otelcol.processor.tail_sampling.drop_health.input]
+  }
+}
+
+// 상태 확인(/healthz, /readyz)과 지표 수집(/actuator/prometheus) 요청은 몇 초마다 들어와 실제 API 추적을 가린다.
+// 그런 요청이 낀 trace를 통째로 버린다(자식 span만 남지 않게 trace 단위로 판단, 5초 모아서 결정).
+otelcol.processor.tail_sampling "drop_health" {
+  decision_wait = "5s"
+  num_traces = 2000
+  expected_new_traces_per_sec = 10
+  policy {
+    name = "drop-health-checks"
+    type = "string_attribute"
+    string_attribute {
+      key = "http.route"
+      values = ["/healthz", "/readyz", "/actuator/prometheus"]
+      invert_match = true
+    }
+  }
+  output {
     traces = [otelcol.processor.transform.sanitize.input]
   }
 }

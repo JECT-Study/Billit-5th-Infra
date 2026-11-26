@@ -103,6 +103,10 @@ class ComposeTests(unittest.TestCase):
         config = (ROOT / 'observability/otel/collector.alloy').read_text()
         self.assertIn('!= "infra-validation" and resource.attributes["service.name"] != "billit-be"', config)
         self.assertIn('spanevent = [`true`]', config)
+        # 상태 확인 요청은 trace 단위로 버린다(자식 span만 남지 않게).
+        self.assertIn('otelcol.processor.tail_sampling "drop_health"', config)
+        self.assertIn('values = ["/healthz", "/readyz", "/actuator/prometheus"]', config)
+        self.assertIn('invert_match = true', config)
         self.assertIn('`set(status.message, "")`', config)
         keep = config[config.index('`keep_keys(attributes, ["http.request.method"'):].split('\n')[0]
         for raw in ('url.', 'db.query', 'db.statement', 'user', 'client.address', 'exception'):
@@ -116,6 +120,16 @@ class ComposeTests(unittest.TestCase):
         env = (ROOT / 'observability/otel/dev-be-otel.env.example').read_text()
         self.assertIn('OTEL_METRICS_EXPORTER=none', env)
         self.assertIn('OTEL_LOGS_EXPORTER=none', env)
+
+    def test_logs_and_traces_link_both_ways(self):
+        env = (ROOT / 'observability/otel/dev-be-otel.env.example').read_text()
+        self.assertIn('OTEL_INSTRUMENTATION_LOGBACK_MDC_ENABLED=true', env)
+        loki = (ROOT / 'observability/grafana/provisioning/datasources/ject.yaml').read_text()
+        self.assertIn('datasourceUid: ject-tempo-dev', loki)
+        self.assertIn("url: '$${__value.raw}'", loki)
+        tempo = (ROOT / 'observability/otel/tempo-datasource.yaml').read_text()
+        self.assertIn('datasourceUid: loki', tempo)
+        self.assertIn('$${__trace.traceId}', tempo)
 
     def test_systemd_preflight_and_mount_order(self):
         unit = (ROOT / 'observability/otel/ject-otel.service').read_text()
