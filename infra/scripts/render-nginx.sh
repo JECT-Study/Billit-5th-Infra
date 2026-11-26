@@ -56,7 +56,9 @@ EOF
 receipt_location() {   # $1 = proxy_pass 줄
   cat <<EOF
     location ~ ^/api/v1/trips/[^/]+/receipt-recognitions\$ {
-        client_body_buffer_size 15m;
+        # 서버는 이미지 15MB, multipart 요청 전체 16MB까지 받으므로 이 경로만 16MB에 맞춘다
+        client_max_body_size 16m;
+        client_body_buffer_size 16m;
         limit_conn receipt_upload 4;
         error_page 503 = @receipt_busy;
         $1
