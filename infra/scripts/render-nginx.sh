@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Nginx 설정 생성 (멱등). 인증서가 있으면 HTTPS 서버 블록을, 없으면 HTTP만 만든다.
 #   운영 앱 VM: render-nginx.sh edge   (환경: /srv/ject/app/edge.env)
-#   개발 VM:   render-nginx.sh dev-gateway
+#   개발 VM:   render-nginx.sh dev-gateway   (DEV_FE_UPSTREAM이 비면 /etc/ject/deploy.conf 값)
 # edge.env 변수: PROD_DOMAIN(선택), DEV_DOMAIN(선택), DEV_UPSTREAM(개발 VM 사설IP:8080)
 #   PROD_DOMAIN·DEV_DOMAIN에는 이름을 공백으로 여러 개 쓸 수 있다(첫 이름이 대표, 뒤는 옛 이름 유지용).
 set -euo pipefail
@@ -200,6 +200,8 @@ EOF
   echo "rendered edge (https=$have_cert prod=${PROD_DOMAIN:-none} dev=${DEV_DOMAIN:-none})"
   ;;
 dev-gateway)
+  # 손으로 다시 생성해도 / 가 BE로 바뀌지 않게 배포 설정(ject-deploy가 읽는 값)을 쓴다.
+  [ -n "${DEV_FE_UPSTREAM:-}" ] || DEV_FE_UPSTREAM="$(sed -n 's/^DEV_FE_UPSTREAM=//p' /etc/ject/deploy.conf 2>/dev/null | tail -n 1)"
   PC="${proxy_common//\$scheme/\$ject_forwarded_proto}"
   OUT=/srv/ject/dev/nginx
   install -d "$OUT/conf.d"
