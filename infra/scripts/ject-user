@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # 팀원 계정 관리(root). 본인이 보낸 공개키(.pub)만 받는다.
 #   ject-user add <username> <공개키 파일> ["이름"]   계정 생성 또는 키 교체. ject-admins(sudo)에 넣는다
+#   ject-user addkey <username> <공개키 파일>          기기를 하나 더 쓸 때 공개키를 덧붙인다(기존 키는 남긴다)
 #   ject-user lock <username>                        로그인 막기. 홈은 남겨둔다
 #   ject-user list
 set -euo pipefail
@@ -25,6 +26,22 @@ add)
   install -d -m 0700 -o "$user" -g "$user" "/home/$user/.ssh"
   install -m 0600 -o "$user" -g "$user" "$keyfile" "/home/$user/.ssh/authorized_keys"
   echo "ok: $user $(ssh-keygen -l -f "$keyfile" | awk '{print $2}')" ;;
+addkey)
+  keyfile="${3:?공개키 파일}"
+  valid_user "$user" || { echo "잘못된 사용자 이름: $user" >&2; exit 1; }
+  id "$user" >/dev/null 2>&1 && id -nG "$user" | grep -qw ject-admins || { echo "활성 계정이 아님: $user (먼저 add)" >&2; exit 1; }
+  grep -q "PRIVATE KEY" "$keyfile" && { echo "개인키는 받지 않는다" >&2; exit 1; }
+  [ "$(grep -cv '^\s*$' "$keyfile")" -eq 1 ] || { echo "공개키 한 줄만 허용" >&2; exit 1; }
+  ssh-keygen -l -f "$keyfile" >/dev/null || { echo "공개키 형식 오류" >&2; exit 1; }
+  auth="/home/$user/.ssh/authorized_keys"
+  key=$(grep -v '^\s*$' "$keyfile")
+  if grep -qxF "$key" "$auth" 2>/dev/null; then
+    echo "already: $user $(ssh-keygen -l -f "$keyfile" | awk '{print $2}')"
+  else
+    printf '%s\n' "$key" >> "$auth"
+    chown "$user:$user" "$auth"; chmod 0600 "$auth"
+    echo "added: $user $(ssh-keygen -l -f "$keyfile" | awk '{print $2}') (키 $(grep -c . "$auth")개)"
+  fi ;;
 lock)
   valid_user "$user" || exit 1
   usermod -L -e 1 "$user"; gpasswd -d "$user" ject-admins >/dev/null 2>&1 || true
@@ -33,8 +50,8 @@ lock)
 list)
   getent group ject-admins | cut -d: -f4 | tr , '\n' | while read -r u; do
     [ -n "$u" ] || continue
-    fp=$(ssh-keygen -l -f "/home/$u/.ssh/authorized_keys" 2>/dev/null | awk '{print $2}' | head -1)
+    fp=$(ssh-keygen -l -f "/home/$u/.ssh/authorized_keys" 2>/dev/null | awk '{print $2}' | paste -sd, -)
     echo "$u ${fp:-no-key}"
   done ;;
-*) echo "usage: ject-user add|lock|list" >&2; exit 2 ;;
+*) echo "usage: ject-user add|addkey|lock|list" >&2; exit 2 ;;
 esac

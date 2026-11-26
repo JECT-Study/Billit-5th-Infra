@@ -84,8 +84,9 @@ DB 툴(DBeaver, DataGrip 등)에는 호스트 `127.0.0.1`, 포트 `25432`(개발
    ```
 3. Tailscale 콘솔 → Users → Invite users → 이메일 입력.
 4. 본인이 `ssh <username>@ject-dev` 되는지 확인받기.
-5. 운영 서버 계정을 만든 BE는 운영 DB 계정도 만든다: `ssh seongju@ject-prod-data 'sudo ject-db-person add <username>'`.
-6. 나갈 때: 7일 안에 계정이 있는 서버마다 `sudo ject-user lock <username>`, Tailscale 콘솔에서 사용자 제거, 운영 DB 계정은 `sudo ject-db-person lock <username>`. 그 사람이 볼 수 있던 DB·Redis 비밀번호와 외부 API 키를 교체하고 `team.yaml`에 회수일을 적는다(팀 개인정보 내부 관리계획 3.1).
+5. 이미 계정이 있는 팀원이 기기를 하나 더 쓰면(예: 폰) 그 기기에서 새로 만든 공개키를 받아 `sudo ject-user addkey <username> <파일>`로 덧붙인다. `add`는 키를 한 줄로 바꾸므로 쓰지 않는다. 다른 기기의 개인키를 옮겨 쓰지 않게 안내한다.
+6. 운영 서버 계정을 만든 BE는 운영 DB 계정도 만든다: `ssh seongju@ject-prod-data 'sudo ject-db-person add <username>'`.
+7. 나갈 때: 7일 안에 계정이 있는 서버마다 `sudo ject-user lock <username>`, Tailscale 콘솔에서 사용자 제거, 운영 DB 계정은 `sudo ject-db-person lock <username>`. 그 사람이 볼 수 있던 DB·Redis 비밀번호와 외부 API 키를 교체하고 `team.yaml`에 회수일을 적는다(팀 개인정보 내부 관리계획 3.1).
 
 ## 접속 기록과 분기 점검
 
