@@ -32,8 +32,8 @@ post() {   # 메시지
 }
 
 [ "${1:-}" = --source-only ] && return 0 2>/dev/null
-# shellcheck disable=SC1091
-. /etc/ject/obs-watch.env
+# shellcheck disable=SC1090
+. "${WATCH_ENV:-/etc/ject/obs-watch.env}"   # WATCH_ENV, STATE는 시험할 때만 바꾼다
 STATE="${STATE:-/var/lib/ject/obs-watch.state}"
 WEBHOOK_FILE="${WEBHOOK_FILE:-/srv/ject/secrets/discord_webhook}"
 install -d -m 0755 "$(dirname "$STATE")"
