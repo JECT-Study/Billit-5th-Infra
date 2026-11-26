@@ -62,7 +62,7 @@ def render(source, webhook):
         settings:
           use_discord_username: true
           title: "[{{ .Status }}] Billit 서버 알림"
-          message: '{{ range .Alerts }}{{ .Labels.alertname }} / {{ .Labels.host }} ({{ .Status }}){{ "\\n" }}{{ end }}'
+          message: '{{ range .Alerts }}**{{ .Labels.alertname }}**{{ with .Labels.host }} · {{ . }}{{ end }}{{ with .Labels.target }} · {{ . }}{{ end }}{{ if eq .Status "resolved" }} (해소){{ end }}{{ "\\n" }}{{ .Annotations.summary }}{{ if eq .Status "firing" }}{{ "\\n" }}{{ .Annotations.description }}{{ end }}{{ "\\n\\n" }}{{ end }}'
           url: ''' + json.dumps(webhook) + '\n' + END
     return source.replace('policies:\n', receiver + 'policies:\n', 1)
 
